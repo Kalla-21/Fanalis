@@ -1,69 +1,78 @@
 import Image from "next/image";
 
+const mockPosts = [
+  { id: 1, title: "osu! World Cup 2026", author: "Tournament Staff", height: "h-64", img: "https://placehold.co/400x600/2a2238/ff66aa" },
+  { id: 2, title: "Ranked Beatmap Updates", author: "BAT", height: "h-40", img: null },
+  { id: 3, title: "New Featured Artist", author: "Peppy", height: "h-80", img: "https://placehold.co/400x800/2a2238/ff66aa" },
+  { id: 4, title: "Tablet Driver Config", author: "TechSupport", height: "h-48", img: "https://placehold.co/400x400/2a2238/ff66aa" },
+  { id: 5, title: "Community Tournament", author: "L A V H", height: "h-64", img: "https://placehold.co/400x600/2a2238/ff66aa" },
+  { id: 6, title: "Keyboard Switches Review", author: "Guest", height: "h-72", img: "https://placehold.co/400x700/2a2238/ff66aa" },
+  { id: 7, title: "Server Maintenance", author: "Admin", height: "h-32", img: null },
+  { id: 8, title: "Mapping Contest Winners", author: "L A V H", height: "h-64", img: "https://placehold.co/400x600/2a2238/ff66aa" },
+  { id: 9, title: "Skinning Tutorial", author: "Designer", height: "h-56", img: "https://placehold.co/400x500/2a2238/ff66aa" },
+  { id: 10, title: "Upcoming PP Changes", author: "Dev Team", height: "h-48", img: null },
+  { id: 11, title: "Anime OP Compilation", author: "Guest", height: "h-80", img: "https://placehold.co/400x800/2a2238/ff66aa" },
+  { id: 12, title: "LAN Event Photos", author: "Photographer", height: "h-64", img: "https://placehold.co/400x600/2a2238/ff66aa" },
+  { id: 13, title: "Mouse vs Tablet Debate", author: "PlayerOne", height: "h-40", img: null },
+  { id: 14, title: "Stream Highlights", author: "Streamer", height: "h-72", img: "https://placehold.co/400x700/2a2238/ff66aa" },
+  { id: 15, title: "Welcome to Fanalis", author: "L A V H", height: "h-64", img: "https://placehold.co/400x600/2a2238/ff66aa" },
+];
+
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    
+    <div className="w-full bg-[#111111] p-6 rounded-lg shadow-xl border border-[#2a2238]">
+      
+      <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-center gap-2 text-gray-200 font-semibold text-lg pb-4">
+      <h1>Explore different blogs and make your own!</h1>
+    </div>
+  </div>
+  
+      <div className="flex gap-6 border-b border-[#2a2238] mb-6 pb-2 px-2">
+        <button className="font-bold text-[#ff66aa] border-b-2 border-[#ff66aa] pb-2 -mb-[9px]">
+          News
+        </button>
+        <button className="font-medium text-gray-400 hover:text-gray-200 pb-2 transition-colors">
+          Beatmaps
+        </button>
+      </div>
+
+      <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+        {mockPosts.map((post) => (
+          <div 
+            key={post.id} 
+            className="break-inside-avoid rounded-lg overflow-hidden shadow-sm bg-[#1e1929] border border-[#2a2238] hover:shadow-md hover:border-[#ff66aa] transition-all cursor-pointer group"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {post.img ? (
+              <div className={`w-full ${post.height} relative bg-[#111111]`}>
+                <img 
+                  src={post.img} 
+                  alt={post.title} 
+                  className="w-full h-full object-cover group-hover:opacity-80 transition-opacity" 
+                />
+              </div>
+            ) : (
+              <div className={`w-full ${post.height} bg-gradient-to-br from-[#2a2238] to-[#1e1929] flex items-center justify-center p-6 text-center`}>
+                 <span className="font-bold text-gray-200 text-lg leading-tight line-clamp-3">
+                   {post.title}
+                 </span>
+              </div>
+            )}
+            
+            <div className="p-3 bg-[#1e1929]">
+              <h3 className="text-sm font-semibold text-gray-200 line-clamp-1 group-hover:text-[#ff66aa] transition-colors">{post.title}</h3>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-xs text-gray-400">{post.author}</span>
+                <button className="text-xs text-gray-500 hover:text-[#ff66aa] transition-colors">
+                  ♡
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }

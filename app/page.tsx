@@ -19,9 +19,10 @@ const mockPosts = [
 ];
 
 export default function Home() {
+
   return (
     
-    <div className="w-full bg-[#111111] p-6 rounded-lg shadow-xl border border-[#2a2238]">
+    <div className="w-full bg-[#1a1721] p-6 rounded-lg shadow-xl border border-[#2a2238]">
       
       <div className="flex flex-col gap-1">
     <div className="flex items-center justify-center gap-2 text-gray-200 font-semibold text-lg pb-4">

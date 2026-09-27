@@ -15,7 +15,7 @@
       return () => clearInterval(intervalId); 
     }, []);
    return (
-     <footer className="flex-1 flex flex-col w-full bg-gray-800 text-gray-300 py-4 text-center text-sm">
+     <footer className="w-full bg-gray-800 text-gray-300 py-4 text-center text-sm">
          <p>Made by Lance Herrera - {time ? `${time} PST 2026` : "Loading time..."}</p>
       </footer>
        );

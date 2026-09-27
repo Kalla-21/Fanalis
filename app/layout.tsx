@@ -1,6 +1,7 @@
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import localFont from "next/font/local";
+import { getUserProfile } from "./utils/getUser";
 import "./globals.css";
 
 const customFont = localFont({
@@ -10,9 +11,11 @@ const customFont = localFont({
 });
 
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+   const { user, profile } = await getUserProfile();
+   
   return (
-    <html lang="en" className="--apply-torus">
+    <html lang="en" className="--apply-torus bg-#181424" >
       <body className="--apply-torus flex flex-col min-h-screen bg-[#111111] text-gray-200 font-sans relative">
         <div className="--apply-torus absolute top-0 left-0 w-full h-[150px] -z-10">
           <img 
@@ -21,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             className="w-full h-full object-cover opacity-80"
           />
         </div>
-        <Navbar />       
+        <Navbar profile={profile} />       
         <main className=" --apply-torus flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 mt-20 z-10">
           {children}
         </main>

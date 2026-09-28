@@ -1,33 +1,34 @@
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
+import ClientBackground from "@/components/client-background";
 import localFont from "next/font/local";
 import { getUserProfile } from "./utils/getUser";
 import "./globals.css";
 
 const customFont = localFont({
   src: "./Torus.otf",
-  variable: "--apply-torus",
   display: "swap",
 });
-
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
    const { user, profile } = await getUserProfile();
    
+   const coverPhotoUrl = profile?.cover_photo_url || "https://i.imgur.com/VVeDHSv.jpeg";
+   const coverPosition = profile?.cover_position ?? 50; 
+   
   return (
-    <html lang="en" className="--apply-torus bg-#181424" >
-      <body className="--apply-torus flex flex-col min-h-screen bg-[#111111] text-gray-200 font-sans relative">
-        <div className="--apply-torus absolute top-0 left-0 w-full h-[150px] -z-10">
-          <img 
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRzwDTp2yBU4Kx69wZHNEApu9_WIWEQFK2WdilDZ0Y-UtSxUBKwvbJs0awx&s=10" 
-            alt="Header Background" 
-            className="w-full h-full object-cover opacity-80"
-          />
-        </div>
-        <Navbar profile={profile} />       
-        <main className=" --apply-torus flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 mt-20 z-10">
+    <html lang="en" className="bg-[#111111] h-full">
+      <body className={`${customFont.className} flex flex-col min-h-full bg-[#111111] text-gray-200 relative`}>
+        
+        {/* Dynamic Client Background replaces the static img div */}
+        <ClientBackground coverUrl={coverPhotoUrl} coverPosition={coverPosition} />
+        
+        <Navbar profile={profile} />      
+        
+        <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 mt-16 sm:mt-20 z-10">
           {children}
         </main>
+        
         <Footer />
       </body>
     </html>

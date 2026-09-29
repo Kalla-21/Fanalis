@@ -12,7 +12,7 @@ import {
 } from "./action";
 
 const killZalgo = (text: string) => (text || "").replace(/[\u0300-\u036f\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g, '');
-const cleanInput = (text: string) => killZalgo(text).replace(/[^a-zA-Z0-9\s:'"\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
+const cleanInput = (text: string) => killZalgo(text).replace(/[^a-zA-Z0-9\s:'"[\]{}\\|><?,./=_+()!@#$%^&*\-\p{Emoji}\u200D\uFE0F]/gu, '');
 
 export default function SettingsForm({ initialProfile, userEmail }: { initialProfile: any, userEmail: string }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(initialProfile?.cover_photo_url || null);

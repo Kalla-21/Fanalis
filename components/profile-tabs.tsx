@@ -20,7 +20,7 @@ type Post = {
 const killZalgo = (text: string) => (text || "").replace(/[\u0300-\u036f\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g, '');
 const cleanInput = (text: string) => killZalgo(text).replace(/[^a-zA-Z0-9\s:'"[\]{}\\|><?,./=_+()!@#$%^&*\-\p{Emoji}\u200D\uFE0F]/gu, '');
 
-export default function ProfileTabs({ userId, serverUser }: { userId: string, serverUser: any }) {
+export default function ProfileTabs({ userId, serverUser }: { userId: string, serverUser?: any }) {
   const [activeTab, setActiveTab] = useState<"My Blogs" | "Liked" | "Comments">("My Blogs");
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);

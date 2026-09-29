@@ -109,17 +109,24 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         setMsg({ text: "File must be under 2MB.", type: "error" }); e.target.value = ""; return;
       }
 
-      const isValidDimensions = await new Promise<boolean>((resolve) => {
+      // Check for strictly >= 300 and <= 2000 dimensions
+      const dimensionCheck = await new Promise<{valid: boolean, errorMsg: string}>((resolve) => {
         const img = new window.Image();
         img.onload = () => {
           URL.revokeObjectURL(img.src);
-          resolve(img.width <= 2000 && img.height <= 2000);
+          if (img.width > 2000 || img.height > 2000) {
+            resolve({ valid: false, errorMsg: "Image dimensions exceed max resolution (2000x2000)." });
+          } else if (img.width < 300 || img.height < 300) {
+            resolve({ valid: false, errorMsg: "Image must be at least 300x300 pixels." });
+          } else {
+            resolve({ valid: true, errorMsg: "" });
+          }
         };
         img.src = URL.createObjectURL(file);
       });
 
-      if (!isValidDimensions) {
-        setMsg({ text: "Image dimensions exceed max resolution (2000x2000).", type: "error" });
+      if (!dimensionCheck.valid) {
+        setMsg({ text: dimensionCheck.errorMsg, type: "error" });
         e.target.value = "";
         return;
       }
@@ -187,7 +194,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Max 2000x2000px)</label>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Min 300x300, Max 2000x2000px)</label>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {coverPreview && <img src={coverPreview} alt="Preview" className="w-40 h-28 object-cover rounded-md border border-[#2a2238] shadow-md" />}
             <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-[#735ab0] file:text-white hover:file:bg-[#856ec4] cursor-pointer transition-colors" />

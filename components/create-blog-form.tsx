@@ -195,7 +195,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Min 300x300, Max 2000x2000px)</label>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image</label>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {coverPreview && <img src={coverPreview} alt="Preview" className="w-40 h-28 object-cover rounded-md border border-[#2a2238] shadow-md" />}
             <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-[#735ab0] file:text-white hover:file:bg-[#856ec4] cursor-pointer transition-colors" />

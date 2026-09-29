@@ -302,7 +302,7 @@ export default function Home() {
                   <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                 </button>
                 <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner overflow-hidden" />
+                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment " : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner overflow-hidden" />
                   <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
@@ -384,7 +384,7 @@ export default function Home() {
                     </button>
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
-                    <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner overflow-hidden" />
+                    <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment " : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner overflow-hidden" />
                     <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>

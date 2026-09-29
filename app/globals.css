@@ -4,7 +4,7 @@
 @tailwind utilities;
 
 :root {
-  --background: #181424
+  --background: #181424;
   --foreground: #171717;
   --font: 'Torus';
 }

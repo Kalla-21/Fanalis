@@ -17,7 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
    const coverPosition = profile?.cover_position ?? 50; 
    
   return (
-    <html lang="en" className="bg-[#111111] h-full">
+    <html lang="en" className="bg-[#181424] h-full">
       <body className={`${customFont.className} flex flex-col min-h-full bg-[#111111] text-gray-200 pt-20 relative`}>
         
         {/* Dynamic Client Background replaces the static img div */}

@@ -11,12 +11,14 @@ import {
   updateEmail 
 } from "./action";
 
+// Regex allows exactly: Alphanumeric, spaces, specified symbols, and standard Emojis
+const isValidText = (text: string) => /^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text);
+
 export default function SettingsForm({ initialProfile, userEmail }: { initialProfile: any, userEmail: string }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(initialProfile?.cover_photo_url || null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialProfile?.avatar_url || null);
   const [coverPosition, setCoverPosition] = useState<number>(initialProfile?.cover_position ?? 50);
   
-  // Controlled fields for real-time limit enforcement
   const [username, setUsername] = useState(initialProfile?.username || "");
   const [bio, setBio] = useState(initialProfile?.bio || "");
   const [newEmail, setNewEmail] = useState("");
@@ -30,7 +32,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
   const [passwordMsg, setPasswordMsg] = useState({ text: "", type: "" });
   const [emailMsg, setEmailMsg] = useState({ text: "", type: "" });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: "cover" | "avatar") => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>, type: "cover" | "avatar") => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type === "image/gif" || file.name.toLowerCase().endsWith('.gif')) {
@@ -49,6 +51,23 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
         return;
       }
 
+      const isValidDimensions = await new Promise<boolean>((resolve) => {
+        const img = new window.Image();
+        img.onload = () => {
+          URL.revokeObjectURL(img.src);
+          resolve(img.width <= 2000 && img.height <= 2000);
+        };
+        img.src = URL.createObjectURL(file);
+      });
+
+      if (!isValidDimensions) {
+        const msg = { text: "Image dimensions exceed max resolution (2000x2000).", type: "error" };
+        if (type === "cover") { setCoverMsg(msg); setCoverPreview(initialProfile?.cover_photo_url || null); }
+        else { setAvatarMsg(msg); setAvatarPreview(initialProfile?.avatar_url || null); }
+        e.target.value = ""; 
+        return;
+      }
+
       if (type === "cover") setCoverMsg({ text: "", type: "" });
       else setAvatarMsg({ text: "", type: "" });
 
@@ -58,18 +77,21 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
     }
   };
 
-  // Limits signature to 200 characters
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const text = e.target.value;
+    if (!isValidText(text)) return;
+    if ([...text].length <= 16) setUsername(text);
+  };
+
   const handleBioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
-    if (text.length <= 200) {
-      setBio(text);
-    }
+    if (!isValidText(text)) return;
+    if ([...text].length <= 200) setBio(text);
   };
 
   function handleCoverSubmit(formData: FormData) {
     setCoverMsg({ text: "Uploading in background...", type: "info" });
     formData.append("cover_position", coverPosition.toString());
-    
     updateCoverPhoto(formData).then((res) => {
       setCoverMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
     });
@@ -77,7 +99,6 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleCoverReset() {
     setCoverMsg({ text: "Resetting...", type: "info" });
-    
     resetCoverPhoto().then((res) => {
       if (!res.error) {
         setCoverPreview(null);
@@ -89,7 +110,6 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleAvatarSubmit(formData: FormData) {
     setAvatarMsg({ text: "Uploading in background...", type: "info" });
-    
     updateAvatarPhoto(formData).then((res) => {
       setAvatarMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
     });
@@ -97,7 +117,6 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleAvatarReset() {
     setAvatarMsg({ text: "Resetting...", type: "info" });
-    
     resetAvatarPhoto().then((res) => {
       if (!res.error) setAvatarPreview(null);
       setAvatarMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
@@ -106,12 +125,8 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleInfoSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (username.length > 16) {
-      return setInfoMsg({ text: "Username must be 16 characters or less.", type: "error" });
-    }
-    if (bio.length > 200) {
-      return setInfoMsg({ text: "Signature cannot exceed 200 characters.", type: "error" });
-    }
+    if ([...username].length > 16) return setInfoMsg({ text: "Username must be 16 characters or less.", type: "error" });
+    if ([...bio].length > 200) return setInfoMsg({ text: "Signature cannot exceed 200 characters.", type: "error" });
 
     setInfoMsg({ text: "Updating...", type: "info" });
     const formData = new FormData();
@@ -125,15 +140,9 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      return setPasswordMsg({ text: "Password must be at least 6 characters.", type: "error" });
-    }
-    if (newPassword.length > 64) {
-      return setPasswordMsg({ text: "Password cannot exceed 64 characters.", type: "error" });
-    }
-    if (newPassword !== confirmPassword) {
-      return setPasswordMsg({ text: "Passwords do not match.", type: "error" });
-    }
+    if ([...newPassword].length < 6) return setPasswordMsg({ text: "Password must be at least 6 characters.", type: "error" });
+    if ([...newPassword].length > 64) return setPasswordMsg({ text: "Password cannot exceed 64 characters.", type: "error" });
+    if (newPassword !== confirmPassword) return setPasswordMsg({ text: "Passwords do not match.", type: "error" });
     
     setPasswordMsg({ text: "Updating...", type: "info" });
     const formData = new FormData();
@@ -151,11 +160,13 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleEmailSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (newEmail.length > 100) {
-      return setEmailMsg({ text: "Email cannot exceed 100 characters.", type: "error" });
-    }
-    if (newEmail !== confirmEmail) {
-      return setEmailMsg({ text: "Emails do not match.", type: "error" });
+    if ([...newEmail].length > 100) return setEmailMsg({ text: "Email cannot exceed 100 characters.", type: "error" });
+    if (newEmail !== confirmEmail) return setEmailMsg({ text: "Emails do not match.", type: "error" });
+
+    const allowedDomains = ["@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com"];
+    const isValidDomain = allowedDomains.some(domain => newEmail.toLowerCase().endsWith(domain));
+    if (!isValidDomain) {
+      return setEmailMsg({ text: "Only @gmail, @yahoo, @hotmail, or @outlook allowed.", type: "error" });
     }
     
     setEmailMsg({ text: "Updating...", type: "info" });
@@ -188,17 +199,10 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
           <div className="flex flex-col gap-4 w-full max-w-xl">
             {coverPreview ? (
               <div className="w-full h-[150px] overflow-hidden rounded-xl shadow-md border border-[#2a2238] relative bg-[#111]">
-                <img 
-                  src={coverPreview} 
-                  alt="Cover Preview" 
-                  className="w-full h-full object-cover transition-all duration-75"
-                  style={{ objectPosition: `center ${coverPosition}%` }}
-                />
+                <img src={coverPreview} alt="Cover Preview" className="w-full h-full object-cover transition-all duration-75" style={{ objectPosition: `center ${coverPosition}%` }} />
               </div>
             ) : (
-              <div className="w-full h-[150px] bg-[#2a2238]/50 rounded-xl border border-[#3e3254] flex items-center justify-center text-gray-500 text-sm">
-                No cover photo set
-              </div>
+              <div className="w-full h-[150px] bg-[#2a2238]/50 rounded-xl border border-[#3e3254] flex items-center justify-center text-gray-500 text-sm">No cover photo set</div>
             )}
 
             {coverPreview && (
@@ -207,14 +211,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
                   <span>Reposition vertical view (150px view)</span>
                   <span>{coverPosition}%</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={coverPosition} 
-                  onChange={(e) => setCoverPosition(Number(e.target.value))}
-                  className="accent-[#735ab0] cursor-pointer"
-                />
+                <input type="range" min="0" max="100" value={coverPosition} onChange={(e) => setCoverPosition(Number(e.target.value))} className="accent-[#735ab0] cursor-pointer" />
               </div>
             )}
 
@@ -225,14 +222,8 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
             <div className="flex items-center gap-3 mt-1">
               <div className="w-24"></div>
-              <button type="submit" className={btnClass}>
-                update 
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </button>
-              <button type="button" onClick={handleCoverReset} className={resetBtnClass}>
-                reset default 
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="button" onClick={handleCoverReset} className={resetBtnClass}>reset default <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
               {coverMsg.text && <p className={`text-sm font-medium ${coverMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{coverMsg.text}</p>}
             </div>
           </div>
@@ -247,9 +238,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             {avatarPreview ? (
               <img src={avatarPreview} alt="Avatar" className="w-24 h-24 object-cover rounded-xl shadow-md border border-[#2a2238]" />
             ) : (
-              <div className="w-24 h-24 bg-[#2a2238]/50 rounded-xl border border-[#3e3254] flex items-center justify-center text-gray-500 text-sm">
-                No avatar
-              </div>
+              <div className="w-24 h-24 bg-[#2a2238]/50 rounded-xl border border-[#3e3254] flex items-center justify-center text-gray-500 text-sm">No avatar</div>
             )}
             <div className="flex items-center gap-4">
               <label className="text-sm text-gray-400 w-24 text-right">avatar file</label>
@@ -257,21 +246,15 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             </div>
             <div className="flex items-center gap-3 mt-1">
               <div className="w-24"></div>
-              <button type="submit" className={btnClass}>
-                update 
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </button>
-              <button type="button" onClick={handleAvatarReset} className={resetBtnClass}>
-                reset default 
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="button" onClick={handleAvatarReset} className={resetBtnClass}>reset default <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
               {avatarMsg.text && <p className={`text-sm font-medium ${avatarMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{avatarMsg.text}</p>}
             </div>
           </div>
         </div>
       </form>
 
-      {/* 3. PROFILE INFO (Username: Max 16 Chars | Signature: Max 200 Chars) */}
+      {/* 3. PROFILE INFO */}
       <form onSubmit={handleInfoSubmit}>
         <div className={rowClass}>
           <span className="font-bold text-gray-200 text-lg drop-shadow-md">Profile Details</span>
@@ -279,96 +262,50 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className="text-sm text-gray-400 w-24 text-right">username</label>
-                <input 
-                  type="text" 
-                  name="username" 
-                  value={username} 
-                  maxLength={16}
-                  onChange={(e) => setUsername(e.target.value)} 
-                  className={inputClass} 
-                  placeholder="Max 16 characters"
-                />
+                <input type="text" name="username" value={username} onChange={handleUsernameChange} className={inputClass} placeholder="Max 16 characters" />
               </div>
-              <div className="ml-28 mt-1 text-[11px] text-gray-500">
-                {username.length}/16 characters
-              </div>
+              <div className="ml-28 mt-1 text-[11px] text-gray-500">{[...username].length}/16 characters</div>
             </div>
 
             <div>
               <div className="flex items-start gap-4">
                 <label className="text-sm text-gray-400 w-24 text-right mt-2">signature</label>
-                <textarea 
-                  name="bio" 
-                  value={bio} 
-                  onChange={handleBioChange} 
-                  maxLength={200}
-                  rows={4} 
-                  className={`${inputClass} resize-none`} 
-                  placeholder="Write something about yourself (max 200 characters)..." 
-                />
+                <textarea name="bio" value={bio} onChange={handleBioChange} rows={4} className={`${inputClass} resize-none`} placeholder="Write something about yourself (max 200 characters)..." />
               </div>
-              <div className="ml-28 mt-1 text-[11px] text-gray-500">
-                {bio.length}/200 characters
-              </div>
+              <div className="ml-28 mt-1 text-[11px] text-gray-500">{[...bio].length}/200 characters</div>
             </div>
 
             <div className="flex items-center gap-4 mt-1">
               <div className="w-24"></div>
-              <button type="submit" className={btnClass}>
-                update 
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
               {infoMsg.text && <p className={`text-sm font-medium ${infoMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{infoMsg.text}</p>}
             </div>
           </div>
         </div>
       </form>
 
-      {/* 4. PASSWORD (Max 64 Chars | Min 6 Chars) */}
+      {/* 4. PASSWORD */}
       <form onSubmit={handlePasswordSubmit}>
         <div className={rowClass}>
           <span className="font-bold text-gray-200 text-lg drop-shadow-md">Password</span>
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
               <label className={labelClass}>new password</label>
-              <input 
-                type="password" 
-                name="new_password" 
-                required 
-                minLength={6}
-                maxLength={64}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className={inputClass} 
-                placeholder="6 - 64 characters"
-              />
+              <input type="password" name="new_password" required value={newPassword} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 64) setNewPassword(e.target.value); }} className={inputClass} placeholder="6 - 64 characters" />
             </div>
             <div className="flex items-center gap-4">
               <label className={labelClass}>password confirmation</label>
-              <input 
-                type="password" 
-                name="password_confirmation" 
-                required 
-                minLength={6}
-                maxLength={64}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={inputClass} 
-                placeholder="Confirm new password"
-              />
+              <input type="password" name="password_confirmation" required value={confirmPassword} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 64) setConfirmPassword(e.target.value); }} className={inputClass} placeholder="Confirm new password" />
             </div>
             <div className="ml-40 flex flex-col gap-2 mt-2">
               {passwordMsg.text && <p className={`text-sm font-medium ${passwordMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{passwordMsg.text}</p>}
-              <button type="submit" className={btnClass}>
-                update 
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>
       </form>
 
-      {/* 5. EMAIL (Max 100 Characters) */}
+      {/* 5. EMAIL */}
       <form onSubmit={handleEmailSubmit}>
         <div className={`${rowClass} border-b-0 pb-0`}>
           <span className="font-bold text-gray-200 text-lg drop-shadow-md">Email</span>
@@ -380,47 +317,21 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>new email</label>
-                <input 
-                  type="email" 
-                  name="new_email" 
-                  required 
-                  maxLength={100}
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className={inputClass} 
-                  placeholder="Max 100 characters"
-                />
+                <input type="email" name="new_email" required value={newEmail} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 100) setNewEmail(e.target.value); }} className={inputClass} placeholder="Trusted domains only" />
               </div>
-              <div className="ml-40 mt-1 text-[11px] text-gray-500">
-                {newEmail.length}/100 characters
-              </div>
+              <div className="ml-40 mt-1 text-[11px] text-gray-500">{[...newEmail].length}/100 characters</div>
             </div>
 
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>email confirmation</label>
-                <input 
-                  type="email" 
-                  name="email_confirmation" 
-                  required 
-                  maxLength={100}
-                  value={confirmEmail}
-                  onChange={(e) => setConfirmEmail(e.target.value)}
-                  className={inputClass} 
-                  placeholder="Confirm new email"
-                />
-              </div>
-              <div className="ml-40 mt-1 text-[11px] text-gray-500">
-                {confirmEmail.length}/100 characters
+                <input type="email" name="email_confirmation" required value={confirmEmail} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 100) setConfirmEmail(e.target.value); }} className={inputClass} placeholder="Confirm new email" />
               </div>
             </div>
 
             <div className="ml-40 flex flex-col gap-2 mt-2 pb-8">
               {emailMsg.text && <p className={`text-sm font-medium ${emailMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{emailMsg.text}</p>}
-              <button type="submit" className={btnClass}>
-                update 
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>

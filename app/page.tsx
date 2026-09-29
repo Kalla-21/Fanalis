@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase"; 
 import AuthModal from "@/components/auth-modal";
 import { getAuthUser } from "@/app/blog/action";
@@ -25,6 +26,7 @@ export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -33,6 +35,17 @@ export default function Home() {
   const [newComment, setNewComment] = useState("");
   const [hasLiked, setHasLiked] = useState(false);
   const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (selectedPost) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => { document.body.style.overflow = "auto"; };
+  }, [selectedPost]);
 
   const fetchUserAndPosts = async () => {
     setIsLoading(true);
@@ -60,7 +73,6 @@ export default function Home() {
     }
 
     const { data, error } = await query;
-    
     if (error) console.error("Supabase Fetch Error:", error.message);
     else if (data) setPosts(data as unknown as Post[]);
     
@@ -70,22 +82,14 @@ export default function Home() {
   useEffect(() => { fetchUserAndPosts(); }, [activeTab]);
 
   useEffect(() => {
-    if (!selectedPost) {
-      document.body.style.overflow = "auto";
-      return;
-    }
-    document.body.style.overflow = "hidden";
+    if (!selectedPost) return;
 
-    const rawText = selectedPost.description.replace(/<[^>]*>?/gm, '');
+    const safeDescription = selectedPost.description || "";
+    const rawText = safeDescription.replace(/<[^>]*>?/gm, '');
     setWordCount(rawText.split(/\s+/).filter(Boolean).length);
 
     const fetchPostDetails = async () => {
-      const { data: commentsData } = await supabase
-        .from("comments")
-        .select(`*, profiles!comments_author_id_fkey(username, avatar_url)`)
-        .eq("post_id", selectedPost.id)
-        .order("created_at", { ascending: true });
-      
+      const { data: commentsData } = await supabase.from("comments").select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).eq("post_id", selectedPost.id).order("created_at", { ascending: true });
       if (commentsData) setComments(commentsData);
 
       if (user) {
@@ -102,11 +106,11 @@ export default function Home() {
     if (hasLiked) {
       await supabase.from("likes").delete().eq("post_id", selectedPost.id).eq("user_id", user.id);
       setHasLiked(false);
-      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: p.likes.filter(l => l.user_id !== user.id) } : p));
+      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: (p.likes || []).filter(l => l.user_id !== user.id) } : p));
     } else {
       await supabase.from("likes").insert({ post_id: selectedPost.id, user_id: user.id });
       setHasLiked(true);
-      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: [...p.likes, { user_id: user.id }] } : p));
+      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: [...(p.likes || []), { user_id: user.id }] } : p));
     }
   };
 
@@ -117,11 +121,11 @@ export default function Home() {
 
     const isCurrentlyLiked = post.likes?.some(l => l.user_id === user.id);
     if (isCurrentlyLiked) {
-      setPosts(posts.map(p => p.id === post.id ? { ...p, likes: p.likes.filter(l => l.user_id !== user.id) } : p));
+      setPosts(posts.map(p => p.id === post.id ? { ...p, likes: (p.likes || []).filter(l => l.user_id !== user.id) } : p));
       await supabase.from("likes").delete().eq("post_id", post.id).eq("user_id", user.id);
       if (selectedPost?.id === post.id) setHasLiked(false);
     } else {
-      setPosts(posts.map(p => p.id === post.id ? { ...p, likes: [...p.likes, { user_id: user.id }] } : p));
+      setPosts(posts.map(p => p.id === post.id ? { ...p, likes: [...(p.likes || []), { user_id: user.id }] } : p));
       await supabase.from("likes").insert({ post_id: post.id, user_id: user.id });
       if (selectedPost?.id === post.id) setHasLiked(true);
     }
@@ -129,7 +133,8 @@ export default function Home() {
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
-    if (text.trim().split(/\s+/).filter(Boolean).length <= 150 || text.length < newComment.length) setNewComment(text);
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return; 
+    if ([...text].length <= 250) setNewComment(text);
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -138,11 +143,10 @@ export default function Home() {
     if (!newComment.trim() || !selectedPost) return;
 
     const { data } = await supabase.from("comments").insert({ post_id: selectedPost.id, author_id: user.id, content: newComment }).select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).single();
-
     if (data) {
       setComments([...comments, data]);
       setNewComment("");
-      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, comments: [...p.comments, { id: data.id } as any] } : p));
+      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, comments: [...(p.comments || []), { id: data.id } as any] } : p));
     }
   };
 
@@ -228,12 +232,13 @@ export default function Home() {
         </div>
       )}
 
-      {selectedPost && currentPost && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-24 pb-4 md:p-10 md:pt-24">
+      {/* PORTALED MODAL */}
+      {mounted && selectedPost && currentPost && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-20 pb-4 md:p-8 md:pt-20">
           <div className="absolute inset-0" onClick={() => setSelectedPost(null)}></div>
           
           {isLongForm ? (
-            <div className="relative w-full max-w-4xl h-[85vh] max-h-[calc(100vh-8rem)] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-4xl h-[80vh] max-h-[calc(100vh-6rem)] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-3">
                 {user?.id === currentPost.author_id && (
                   <button onClick={handleDeletePost} className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
@@ -245,13 +250,13 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {currentPost.image_url && (
                   <div className="w-full bg-black/60 flex items-center justify-center p-6 border-b border-[#2a2238]">
                     <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-[70vh] object-contain rounded-md shadow-lg" />
                   </div>
                 )}
-                <div className="max-w-3xl mx-auto px-6 py-10">
+                <div className="max-w-3xl mx-auto px-6 py-10 pr-24">
                   <div className="flex items-center gap-4 mb-8">
                     <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-14 h-14 rounded-full object-cover border border-[#2a2238]" />
                     <div>
@@ -291,12 +296,12 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col sm:flex-row items-center gap-4">
+              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col sm:flex-row items-center gap-4 shrink-0">
                 <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                   <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                 </button>
                 <form onSubmit={handleCommentSubmit} className="flex-1 flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
+                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
                   <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
@@ -304,7 +309,7 @@ export default function Home() {
 
           ) : (
 
-            <div className="relative w-full max-w-6xl h-[85vh] max-h-[calc(100vh-8rem)] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-6xl h-[80vh] max-h-[calc(100vh-6rem)] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-3">
                 {user?.id === currentPost.author_id && (
                   <button onClick={handleDeletePost} className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
@@ -316,7 +321,7 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="w-full h-1/3 md:h-full md:w-[65%] bg-black flex items-center justify-center relative border-b md:border-b-0 md:border-r border-[#2a2238] p-4 shrink-0">
+              <div className="w-full md:w-[60%] h-[35%] md:h-full bg-black flex items-center justify-center relative border-b md:border-b-0 md:border-r border-[#2a2238] p-4 shrink-0 min-w-0">
                 {currentPost.image_url ? (
                   <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-full object-contain rounded-md" />
                 ) : (
@@ -324,18 +329,19 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="w-full h-2/3 md:h-full md:w-[35%] flex flex-col bg-[#16131c]">
-                <div className="p-4 border-b border-[#2a2238] flex items-center gap-3">
+              <div className="w-full md:w-[40%] h-[65%] md:h-full flex flex-col bg-[#16131c] shrink-0 min-w-[320px] overflow-hidden">
+                
+                <div className="p-4 pr-24 border-b border-[#2a2238] flex items-center gap-3 shrink-0">
                   <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden shrink-0">
                     <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-full h-full object-cover" />
                   </div>
-                  <div>
-                    <h4 className="text-gray-100 font-semibold text-sm">{currentPost.profiles?.username || "Unknown"}</h4>
-                    <p className="text-xs text-gray-500">{new Date(currentPost.created_at).toLocaleDateString()}</p>
+                  <div className="min-w-0">
+                    <h4 className="text-gray-100 font-semibold text-sm truncate">{currentPost.profiles?.username || "Unknown"}</h4>
+                    <p className="text-xs text-gray-500 truncate">{new Date(currentPost.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar min-h-0">
                   <div>
                     <h2 className="text-white font-bold text-2xl mb-4 break-words">{currentPost.title}</h2>
                     <div className="text-gray-300 text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description }} />
@@ -369,7 +375,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3">
+                <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3 shrink-0">
                   <div className="flex gap-4">
                     <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                       <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
@@ -377,14 +383,16 @@ export default function Home() {
                     </button>
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
-                    <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
-                    <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                    <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
+                    <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
+
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

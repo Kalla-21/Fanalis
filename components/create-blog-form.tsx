@@ -15,7 +15,6 @@ type CreateBlogFormProps = {
   isModal?: boolean;
 };
 
-// Moved outside the component to prevent "Duplicate extension" warnings during React Strict Mode re-renders
 const TIPTAP_EXTENSIONS = [
   StarterKit, 
   Underline, 
@@ -90,7 +89,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
   const editor = useEditor({
     extensions: TIPTAP_EXTENSIONS,
     content: '',
-    immediatelyRender: false, // Suppresses the hydration mismatch warning
+    immediatelyRender: false, 
     onUpdate: ({ editor }) => { 
       setWordCount(editor.storage.characterCount.words()); 
       setCharCount(editor.storage.characterCount.characters());
@@ -100,7 +99,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
     },
   });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.type === "image/gif" || file.name.toLowerCase().endsWith('.gif')) {
@@ -109,13 +108,32 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
       if (file.size > 2 * 1024 * 1024) {
         setMsg({ text: "File must be under 2MB.", type: "error" }); e.target.value = ""; return;
       }
-      setCoverFile(file); setCoverPreview(URL.createObjectURL(file)); setMsg({ text: "", type: "" });
+
+      const isValidDimensions = await new Promise<boolean>((resolve) => {
+        const img = new window.Image();
+        img.onload = () => {
+          URL.revokeObjectURL(img.src);
+          resolve(img.width <= 2000 && img.height <= 2000);
+        };
+        img.src = URL.createObjectURL(file);
+      });
+
+      if (!isValidDimensions) {
+        setMsg({ text: "Image dimensions exceed max resolution (2000x2000).", type: "error" });
+        e.target.value = "";
+        return;
+      }
+
+      setCoverFile(file); 
+      setCoverPreview(URL.createObjectURL(file)); 
+      setMsg({ text: "", type: "" });
     }
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
-    if (text.trim().split(/\s+/).filter(Boolean).length <= 50 || text.length < title.length) setTitle(text);
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 100) setTitle(text);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,6 +142,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
     if (wordCount > wordLimit) return setMsg({ text: `Content exceeds ${wordLimit} words.`, type: "error" });
     if (charCount > charLimit) return setMsg({ text: `Content exceeds ${charLimit} characters.`, type: "error" });
     if (wordCount === 0) return setMsg({ text: "Content cannot be empty.", type: "error" });
+    if ([...title].length > 100) return setMsg({ text: "Title cannot exceed 100 characters.", type: "error" });
     
     setIsSubmitting(true);
     setMsg({ text: "Publishing blog...", type: "info" });
@@ -156,7 +175,10 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">Title (max 50 words) <span className="text-[#ff66aa]">*</span></label>
+          <div className="flex justify-between items-end mb-2">
+            <label className="block text-sm font-semibold text-gray-300">Title <span className="text-[#ff66aa]">*</span></label>
+            <span className="text-xs font-medium text-gray-400">{[...title].length} / 100 chars</span>
+          </div>
           <input
             type="text" required value={title} onChange={handleTitleChange}
             className="w-full bg-[#231d2e] border border-[#3b304c] text-gray-100 rounded-md px-4 py-3 focus:outline-none focus:border-[#ff66aa] transition-colors text-lg shadow-inner"
@@ -165,7 +187,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Optional)</label>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Max 2000x2000px)</label>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {coverPreview && <img src={coverPreview} alt="Preview" className="w-40 h-28 object-cover rounded-md border border-[#2a2238] shadow-md" />}
             <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-[#735ab0] file:text-white hover:file:bg-[#856ec4] cursor-pointer transition-colors" />

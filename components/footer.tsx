@@ -15,7 +15,7 @@ export default function Footer() {
 
   return (
     <footer className="w-full bg-[#1a1721] text-gray-300 py-4 text-center text-sm z-10">
-      <p>Made by Lance Herrera - {time ? `${time} PST 2026` : "Loading time..."}</p>
+      <p>Developed by LAVH - {time ? `${time} PST 2026` : "Loading time..."}</p>
     </footer>
   );
 }

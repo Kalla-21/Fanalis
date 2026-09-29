@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase"; 
-import AuthModal from "@/components/auth-modal";
+import { supabase } from "@/lib/supabase";
 import { getAuthUser } from "@/app/blog/action";
+import AuthModal from "@/components/auth-modal";
+
+type Profile = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  cover_photo_url: string | null;
+  cover_position: number | null;
+  bio: string | null;
+  created_at: string;
+};
 
 type Post = {
   id: string;
@@ -18,74 +27,78 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
-export default function Home() {
-  const router = useRouter();
+export default function AuthorsPage() {
+  const [authUser, setAuthUser] = useState<any>(null);
+  const [authors, setAuthors] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState("Explore");
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  
+  const [selectedAuthor, setSelectedAuthor] = useState<Profile | null>(null);
+  const [authorPosts, setAuthorPosts] = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
   const [hasLiked, setHasLiked] = useState(false);
   const [wordCount, setWordCount] = useState(0);
 
-  const fetchUserAndPosts = async () => {
-    setIsLoading(true);
-    
-    const serverUser = await getAuthUser();
-    setUser(serverUser);
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      const user = await getAuthUser();
+      if (user) setAuthUser(user);
 
-    if (activeTab === "My Blogs" && !serverUser) {
-      setPosts([]);
-      setIsLoading(false);
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("username", { ascending: true });
+
+      if (data) setAuthors(data);
+      setLoading(false);
+    };
+
+    fetchInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedAuthor) {
+      setAuthorPosts([]);
       return;
     }
 
-    let query = supabase
-      .from("posts")
-      .select(`
-        id, 
-        title, 
-        description, 
-        image_url, 
-        created_at, 
-        author_id,
-        profiles!posts_author_id_fkey (username, avatar_url),
-        likes (user_id),
-        comments (id)
-      `)
-      .order("created_at", { ascending: false });
+    const fetchAuthorPosts = async () => {
+      setPostsLoading(true);
+      const { data } = await supabase
+        .from("posts")
+        .select(`
+          id, title, description, image_url, created_at, author_id,
+          profiles!posts_author_id_fkey (username, avatar_url),
+          likes (user_id),
+          comments (id)
+        `)
+        .eq("author_id", selectedAuthor.id)
+        .order("created_at", { ascending: false });
 
-    if (activeTab === "My Blogs" && serverUser) {
-      query = query.eq("author_id", serverUser.id);
-    }
+      if (data) setAuthorPosts(data as unknown as Post[]);
+      setPostsLoading(false);
+    };
 
-    const { data, error } = await query;
+    fetchAuthorPosts();
     
-    if (error) {
-      console.error("Supabase Fetch Error:", error.message);
-    } else if (data) {
-      setPosts(data as unknown as Post[]);
-    }
-    
-    setIsLoading(false);
-  };
+    document.body.style.overflow = "hidden";
+    return () => {
+      if (!selectedPost) document.body.style.overflow = "auto";
+    };
+  }, [selectedAuthor]);
 
   useEffect(() => {
-    fetchUserAndPosts();
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (!selectedPost) return;
+    if (!selectedPost) {
+      if (!selectedAuthor) document.body.style.overflow = "auto";
+      return;
+    }
 
     const rawText = selectedPost.description.replace(/<[^>]*>?/gm, '');
-    const count = rawText.split(/\s+/).filter(Boolean).length;
-    setWordCount(count);
+    setWordCount(rawText.split(/\s+/).filter(Boolean).length);
 
     const fetchPostDetails = async () => {
       const { data: commentsData } = await supabase
@@ -96,12 +109,12 @@ export default function Home() {
       
       if (commentsData) setComments(commentsData);
 
-      if (user) {
+      if (authUser) {
         const { data: likeData } = await supabase
           .from("likes")
           .select("*")
           .eq("post_id", selectedPost.id)
-          .eq("user_id", user.id)
+          .eq("user_id", authUser.id)
           .single();
         
         setHasLiked(!!likeData);
@@ -109,35 +122,31 @@ export default function Home() {
     };
 
     fetchPostDetails();
-  }, [selectedPost, user]);
+  }, [selectedPost, authUser]);
 
   const handleLike = async () => {
-    if (!user) return setAuthModalOpen(true);
+    if (!authUser) return setAuthModalOpen(true);
     if (!selectedPost) return;
 
     if (hasLiked) {
-      await supabase.from("likes").delete().eq("post_id", selectedPost.id).eq("user_id", user.id);
+      await supabase.from("likes").delete().eq("post_id", selectedPost.id).eq("user_id", authUser.id);
       setHasLiked(false);
-      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: p.likes.slice(0, -1) } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: p.likes.slice(0, -1) } : p));
     } else {
-      await supabase.from("likes").insert({ post_id: selectedPost.id, user_id: user.id });
+      await supabase.from("likes").insert({ post_id: selectedPost.id, user_id: authUser.id });
       setHasLiked(true);
-      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: [...p.likes, { user_id: user.id }] } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: [...p.likes, { user_id: authUser.id }] } : p));
     }
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return setAuthModalOpen(true);
+    if (!authUser) return setAuthModalOpen(true);
     if (!newComment.trim() || !selectedPost) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("comments")
-      .insert({
-        post_id: selectedPost.id,
-        author_id: user.id,
-        content: newComment
-      })
+      .insert({ post_id: selectedPost.id, author_id: authUser.id, content: newComment })
       .select(`*, profiles!comments_author_id_fkey(username, avatar_url)`)
       .single();
 
@@ -148,7 +157,7 @@ export default function Home() {
   };
 
   const handleDeletePost = async () => {
-    if (!user || !selectedPost || user.id !== selectedPost.author_id) return;
+    if (!authUser || !selectedPost || authUser.id !== selectedPost.author_id) return;
     
     const confirmDelete = window.confirm("Are you sure you want to delete this blog? This action cannot be undone.");
     if (!confirmDelete) return;
@@ -156,15 +165,13 @@ export default function Home() {
     const { error } = await supabase.from("posts").delete().eq("id", selectedPost.id);
     
     if (!error) {
-      setPosts(posts.filter(p => p.id !== selectedPost.id));
+      setAuthorPosts(authorPosts.filter(p => p.id !== selectedPost.id));
       setSelectedPost(null);
-    } else {
-      console.error("Failed to delete post:", error.message);
     }
   };
 
   const handleDeleteComment = async (commentId: string, commentAuthorId: string) => {
-    if (!user || user.id !== commentAuthorId) return;
+    if (!authUser || authUser.id !== commentAuthorId) return;
 
     const confirmDelete = window.confirm("Are you sure you want to delete this comment?");
     if (!confirmDelete) return;
@@ -173,12 +180,10 @@ export default function Home() {
     
     if (!error) {
       setComments(comments.filter(c => c.id !== commentId));
-    } else {
-      console.error("Failed to delete comment:", error.message);
     }
   };
 
-  const currentPost = posts.find(p => p.id === selectedPost?.id) || selectedPost;
+  const currentPost = authorPosts.find(p => p.id === selectedPost?.id) || selectedPost;
   const isLongForm = wordCount >= 500;
 
   return (
@@ -190,94 +195,157 @@ export default function Home() {
         message="You need an account to interact with blogs." 
       />
 
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-center gap-2 text-gray-200 font-semibold text-lg pb-4">
-          <h1>Explore different blogs and make your own!</h1>
-        </div>
-      </div>
-  
-      <div className="flex justify-between items-end border-b border-[#2a2238] mb-6 pb-2 px-2">
-        <div className="flex gap-6">
-          {["Explore", "My Blogs"].map((tab) => (
-            <button 
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-2 -mb-[9px] transition-colors ${
-                activeTab === tab 
-                  ? "font-bold text-[#ff66aa] border-b-2 border-[#ff66aa]" 
-                  : "font-medium text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        
-        <button 
-          onClick={() => user ? router.push("/blog") : setAuthModalOpen(true)}
-          disabled={isLoading}
-          className={`bg-[#ff66aa] hover:bg-[#ff4499] text-white font-bold py-1.5 px-4 rounded-md text-sm transition-all shadow-md mb-1 ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
-        >
-          Make a Blog
-        </button>
+      <div className="mb-6 border-b border-[#2a2238] pb-4 px-2">
+        <h1 className="text-3xl font-bold text-white tracking-tight">Explore Authors</h1>
+        <p className="text-gray-400 mt-2 text-sm">Discover creators and read their latest blogs.</p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center text-[#ff66aa] py-10 font-bold">Loading posts...</div>
-      ) : posts.length === 0 ? (
-        <div className="text-center text-gray-500 py-10">
-          {activeTab === "My Blogs" && !user 
-            ? "Sign up and log in to make a blog!" 
-            : "No posts found. Be the first to create one!"}
-        </div>
+      {loading ? (
+        <div className="text-center text-[#ff66aa] py-20 font-bold">Loading authors...</div>
+      ) : authors.length === 0 ? (
+        <div className="text-center text-gray-500 py-20">No authors found.</div>
       ) : (
-        <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-          {posts.map((post) => (
-            <div 
-              key={post.id} 
-              onClick={() => setSelectedPost(post)}
-              className="break-inside-avoid rounded-lg overflow-hidden shadow-sm bg-[#1e1929] border border-[#2a2238] hover:shadow-md hover:border-[#ff66aa] transition-all cursor-pointer group"
-            >
-              {post.image_url ? (
-                <div className="w-full relative bg-[#111111]">
-                  <img 
-                    src={post.image_url} 
-                    alt={post.title} 
-                    className="w-full h-auto block group-hover:opacity-80 transition-opacity" 
-                  />
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {authors.map((author) => {
+            const joinedDate = new Date(author.created_at).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+            const avatar = author.avatar_url || "https://placehold.co/150x150/e2e8f0/64748b?text=U";
+            const cover = author.cover_photo_url || "https://i.imgur.com/VVeDHSv.jpeg";
+
+            return (
+              <div 
+                key={author.id}
+                onClick={() => setSelectedAuthor(author)}
+                className="relative overflow-hidden rounded-xl bg-[#211c2c] border border-[#3e3254]/50 hover:border-[#ff66aa] transition-all cursor-pointer group shadow-lg h-24 flex items-center p-3"
+              >
+                <div className="absolute inset-0 z-0">
+                  <img src={cover} alt="cover" className="w-full h-full object-cover opacity-30 group-hover:opacity-40 transition-opacity" style={{ objectPosition: `center ${author.cover_position ?? 50}%` }} />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#1a1721] via-[#1a1721]/80 to-transparent"></div>
                 </div>
-              ) : (
-                <div className="w-full h-48 bg-gradient-to-br from-[#2a2238] to-[#1e1929] flex flex-col items-center justify-center p-6 text-center">
-                   <span className="font-bold text-gray-200 text-lg leading-tight line-clamp-3">
-                     {post.title}
-                   </span>
-                </div>
-              )}
-              
-              <div className="p-3 bg-[#1e1929]">
-                <h3 className="text-sm font-semibold text-gray-200 line-clamp-1 group-hover:text-[#ff66aa] transition-colors">{post.title}</h3>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-xs text-gray-400">{post.profiles?.username || "Unknown"}</span>
-                  <span className="text-xs text-gray-500 flex gap-1 items-center hover:text-[#ff66aa] transition-colors">
-                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    {post.likes?.length || 0}
-                  </span>
+
+                <div className="relative z-10 flex items-center gap-4 w-full">
+                  <div className="relative">
+                    <img src={avatar} alt={author.username} className="w-14 h-14 rounded-lg object-cover border-2 border-[#2a2238] shadow-md" />
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 border-2 border-[#1a1721] rounded-full"></div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-bold text-base truncate drop-shadow-md group-hover:text-[#ff66aa] transition-colors">{author.username}</h3>
+                    <p className="text-gray-400 text-xs truncate">Joined {joinedDate}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      {/* AUTHOR MODAL */}
+      {selectedAuthor && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-10 overflow-y-auto custom-scrollbar">
+          <div className="fixed inset-0" onClick={() => setSelectedAuthor(null)}></div>
+          
+          <div className="relative w-full max-w-5xl bg-[#16131c] border border-[#2a2238] rounded-2xl flex flex-col overflow-hidden shadow-2xl my-auto z-10 animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setSelectedAuthor(null)}
+              className="absolute top-4 right-4 z-50 w-8 h-8 bg-black/50 hover:bg-[#ff66aa] text-white rounded-full flex items-center justify-center transition-colors border border-white/10"
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+
+            <div className="flex-1 overflow-y-auto max-h-[85vh] custom-scrollbar pb-10">
+              
+              <div className="relative">
+                <div className="relative h-48 sm:h-64 w-full bg-[#111]">
+                  <img 
+                    src={selectedAuthor.cover_photo_url || "https://i.imgur.com/VVeDHSv.jpeg"} 
+                    alt="Cover" 
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: `center ${selectedAuthor.cover_position ?? 50}%` }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#16131c] via-[#16131c]/60 to-transparent"></div>
+                </div>
+
+                <div className="px-6 pb-6 relative flex flex-col sm:flex-row gap-4 sm:gap-6 sm:items-end">
+                  <div className="-mt-16 sm:-mt-20 relative z-10 shrink-0">
+                    <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden border-4 border-[#16131c] bg-gray-800 shadow-xl">
+                      <img src={selectedAuthor.avatar_url || "https://placehold.co/150x150/e2e8f0/64748b?text=U"} alt="Avatar" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                  <div className="flex-1 pb-2">
+                    <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight drop-shadow-md">
+                      {selectedAuthor.username}
+                    </h1>
+                    <p className="text-sm text-gray-400 mt-1 font-medium">
+                      Joined {new Date(selectedAuthor.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedAuthor.bio && (
+                  <div className="px-6 pb-6">
+                    <div className="bg-[#211c2c] p-4 rounded-xl border border-[#2a2238] text-gray-300 text-sm leading-relaxed">
+                      {selectedAuthor.bio}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6">
+                <div className="flex items-center gap-6 border-b border-[#2a2238] mb-6 pb-0">
+                  <button className="text-[#ff66aa] font-bold text-sm pb-3 border-b-2 border-[#ff66aa] relative top-[1px]">
+                    {selectedAuthor.username}'s Blogs
+                  </button>
+                </div>
+
+                {postsLoading ? (
+                  <div className="text-center text-[#ff66aa] py-10 font-bold">Loading blogs...</div>
+                ) : authorPosts.length === 0 ? (
+                  <div className="text-center text-gray-500 py-10">This author hasn't published any blogs yet.</div>
+                ) : (
+                  <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 space-y-4">
+                    {authorPosts.map((post) => (
+                      <div 
+                        key={post.id} 
+                        onClick={() => setSelectedPost(post)} 
+                        className="bg-[#2a2238] rounded-xl overflow-hidden break-inside-avoid shadow-lg flex flex-col cursor-pointer hover:border-[#ff66aa] border border-[#3e3254]/30 transition-colors group"
+                      >
+                        {post.image_url ? (
+                          <div className="w-full relative bg-[#111111]">
+                            <img src={post.image_url} alt={post.title} className="w-full h-auto block group-hover:opacity-80 transition-opacity" />
+                          </div>
+                        ) : (
+                          <div className="w-full h-40 bg-gradient-to-br from-[#2a2238] to-[#1e1929] flex items-center justify-center p-4 text-center">
+                            <span className="text-[#ff66aa] font-bold text-lg line-clamp-2">{post.title}</span>
+                          </div>
+                        )}
+
+                        <div className="bg-[#1e1928] p-4 relative flex flex-col gap-1 border-t border-black/20">
+                          <h3 className="text-white font-bold text-[13px] truncate pr-6 group-hover:text-[#ff66aa] transition-colors">{post.title}</h3>
+                          <p className="text-gray-400 text-xs truncate">{selectedAuthor.username}</p>
+                          <span className="absolute bottom-4 right-4 text-gray-500 flex items-center gap-1 text-xs">
+                            <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            {post.likes?.length || 0}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POST MODAL (z-110) */}
       {selectedPost && currentPost && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-10">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-10">
           <div className="absolute inset-0" onClick={() => setSelectedPost(null)}></div>
           
           {isLongForm ? (
             <div className="relative w-full max-w-4xl h-[90vh] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               
               <div className="absolute top-4 right-4 z-50 flex gap-3">
-                {user?.id === currentPost.author_id && (
+                {authUser?.id === currentPost.author_id && (
                   <button 
                     onClick={handleDeletePost} 
                     title="Delete Post"
@@ -332,7 +400,7 @@ export default function Home() {
                               <span className="text-gray-200 text-sm font-bold">{comment.profiles?.username}</span>
                               <span className="text-gray-500 text-xs">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
-                            {user?.id === comment.author_id && (
+                            {authUser?.id === comment.author_id && (
                               <button 
                                 onClick={() => handleDeleteComment(comment.id, comment.author_id)}
                                 className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1"
@@ -363,11 +431,11 @@ export default function Home() {
                     type="text"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder={user ? "Add a comment..." : "Log in to comment"}
-                    disabled={!user}
+                    placeholder={authUser ? "Add a comment..." : "Log in to comment"}
+                    disabled={!authUser}
                     className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                   />
-                  <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                  <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
                 </form>
               </div>
             </div>
@@ -377,7 +445,7 @@ export default function Home() {
             <div className="relative w-full max-w-6xl h-[85vh] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               
               <div className="absolute top-4 right-4 z-50 flex gap-3">
-                {user?.id === currentPost.author_id && (
+                {authUser?.id === currentPost.author_id && (
                   <button 
                     onClick={handleDeletePost} 
                     title="Delete Post"
@@ -437,7 +505,7 @@ export default function Home() {
                               <span className="text-gray-200 text-sm font-semibold">{comment.profiles?.username}</span>
                               <span className="text-gray-500 text-[10px]">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
-                            {user?.id === comment.author_id && (
+                            {authUser?.id === comment.author_id && (
                               <button 
                                 onClick={() => handleDeleteComment(comment.id, comment.author_id)}
                                 className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1"
@@ -462,7 +530,7 @@ export default function Home() {
                       </svg>
                       <span className="text-sm font-medium">{hasLiked ? "Liked" : "Like"}</span>
                     </button>
-                    <button onClick={() => !user && setAuthModalOpen(true)} className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors">
+                    <button onClick={() => !authUser && setAuthModalOpen(true)} className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors">
                       <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                       </svg>
@@ -475,11 +543,11 @@ export default function Home() {
                       type="text"
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      placeholder={user ? "Add a comment..." : "Log in to comment"}
-                      disabled={!user}
+                      placeholder={authUser ? "Add a comment..." : "Log in to comment"}
+                      disabled={!authUser}
                       className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
                     />
-                    <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">
+                    <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">
                       Post
                     </button>
                   </form>

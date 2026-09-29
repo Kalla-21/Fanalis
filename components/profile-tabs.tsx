@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getAuthUser } from "@/app/blog/action";
+import AuthModal from "@/components/auth-modal";
 
 type Post = {
   id: string;
@@ -13,14 +14,29 @@ type Post = {
   author_id: string;
   profiles: { username: string; avatar_url: string };
   likes: { user_id: string }[];
-  comments: { id: string }[];
+  comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
 export default function ProfileTabs({ userId }: { userId: string }) {
-  const router = useRouter();
+  const [authUser, setAuthUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<"My Blogs" | "Liked" | "Comments">("My Blogs");
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [hasLiked, setHasLiked] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const user = await getAuthUser();
+      if (user) setAuthUser(user);
+    };
+    fetchUser();
+  }, []);
 
   useEffect(() => {
     const fetchTabData = async () => {
@@ -95,9 +111,111 @@ export default function ProfileTabs({ userId }: { userId: string }) {
     fetchTabData();
   }, [activeTab, userId]);
 
+  useEffect(() => {
+    if (!selectedPost) {
+      document.body.style.overflow = "auto";
+      return;
+    }
+    
+    document.body.style.overflow = "hidden";
+
+    const rawText = selectedPost.description.replace(/<[^>]*>?/gm, '');
+    setWordCount(rawText.split(/\s+/).filter(Boolean).length);
+
+    const fetchPostDetails = async () => {
+      const { data: commentsData } = await supabase
+        .from("comments")
+        .select(`*, profiles!comments_author_id_fkey(username, avatar_url)`)
+        .eq("post_id", selectedPost.id)
+        .order("created_at", { ascending: true });
+      
+      if (commentsData) setComments(commentsData);
+
+      if (authUser) {
+        const { data: likeData } = await supabase
+          .from("likes")
+          .select("*")
+          .eq("post_id", selectedPost.id)
+          .eq("user_id", authUser.id)
+          .single();
+        
+        setHasLiked(!!likeData);
+      }
+    };
+
+    fetchPostDetails();
+  }, [selectedPost, authUser]);
+
+  const handleLike = async () => {
+    if (!authUser || !selectedPost) return setAuthModalOpen(true);
+
+    if (hasLiked) {
+      await supabase.from("likes").delete().eq("post_id", selectedPost.id).eq("user_id", authUser.id);
+      setHasLiked(false);
+      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: p.likes.slice(0, -1) } : p));
+    } else {
+      await supabase.from("likes").insert({ post_id: selectedPost.id, user_id: authUser.id });
+      setHasLiked(true);
+      setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, likes: [...p.likes, { user_id: authUser.id }] } : p));
+    }
+  };
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authUser) return setAuthModalOpen(true);
+    if (!newComment.trim() || !selectedPost) return;
+
+    const { data } = await supabase
+      .from("comments")
+      .insert({ post_id: selectedPost.id, author_id: authUser.id, content: newComment })
+      .select(`*, profiles!comments_author_id_fkey(username, avatar_url)`)
+      .single();
+
+    if (data) {
+      setComments([...comments, data]);
+      setNewComment("");
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!authUser || !selectedPost || authUser.id !== selectedPost.author_id) return;
+    
+    const confirmDelete = window.confirm("Are you sure you want to delete this blog? This action cannot be undone.");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase.from("posts").delete().eq("id", selectedPost.id);
+    
+    if (!error) {
+      setPosts(posts.filter(p => p.id !== selectedPost.id));
+      setSelectedPost(null);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string, commentAuthorId: string) => {
+    if (!authUser || authUser.id !== commentAuthorId) return;
+
+    const confirmDelete = window.confirm("Are you sure you want to delete this comment?");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase.from("comments").delete().eq("id", commentId);
+    
+    if (!error) {
+      setComments(comments.filter(c => c.id !== commentId));
+    }
+  };
+
+  const currentPost = posts.find(p => p.id === selectedPost?.id) || selectedPost;
+  const isLongForm = wordCount >= 500;
+
   return (
     <div className="bg-[#1a1721] rounded-2xl border border-[#2a2238] p-6 shadow-xl min-h-[600px]">
       
+      <AuthModal 
+        isOpen={authModalOpen} 
+        onClose={() => setAuthModalOpen(false)} 
+        message="You need an account to interact with blogs." 
+      />
+
       {/* Navigation Tabs */}
       <div className="flex items-center gap-6 border-b border-[#2a2238] mb-6 pb-0">
         {(["My Blogs", "Liked", "Comments"] as const).map((tab) => (
@@ -125,7 +243,7 @@ export default function ProfileTabs({ userId }: { userId: string }) {
           {posts.map((post) => (
             <div 
               key={post.id} 
-              onClick={() => router.push(`/?post=${post.id}`)}
+              onClick={() => setSelectedPost(post)}
               className="bg-[#2a2238] rounded-xl overflow-hidden break-inside-avoid shadow-lg flex flex-col group cursor-pointer border border-[#3e3254]/30 hover:border-[#52446e] transition-colors"
             >
               {post.image_url ? (
@@ -145,15 +263,240 @@ export default function ProfileTabs({ userId }: { userId: string }) {
               )}
 
               <div className="bg-[#1e1928] p-4 relative flex flex-col gap-1 border-t border-black/20">
-                <h3 className="text-white font-bold text-[13px] truncate pr-6">{post.title}</h3>
+                <h3 className="text-white font-bold text-[13px] truncate pr-6 group-hover:text-[#ff66aa] transition-colors">{post.title}</h3>
                 <p className="text-gray-400 text-xs truncate">{post.profiles?.username || "Unknown"}</p>
 
                 <span className="absolute bottom-4 right-4 text-gray-500 flex items-center gap-1 text-xs">
-                  ♡ {post.likes?.length || 0}
+                  <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                  {post.likes?.length || 0}
                 </span>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* POST MODAL */}
+      {selectedPost && currentPost && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-10">
+          <div className="absolute inset-0" onClick={() => setSelectedPost(null)}></div>
+          
+          {isLongForm ? (
+            <div className="relative w-full max-w-4xl h-[90vh] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              
+              <div className="absolute top-4 right-4 z-50 flex gap-3">
+                {authUser?.id === currentPost.author_id && (
+                  <button 
+                    onClick={handleDeletePost} 
+                    title="Delete Post"
+                    className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10"
+                  >
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedPost(null)}
+                  className="w-8 h-8 bg-black/50 hover:bg-[#ff66aa] text-white rounded-full flex items-center justify-center transition-colors border border-white/10"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {currentPost.image_url && (
+                  <div className="w-full bg-black/60 flex items-center justify-center p-6 border-b border-[#2a2238]">
+                    <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-[70vh] object-contain rounded-md shadow-lg" />
+                  </div>
+                )}
+
+                <div className="max-w-3xl mx-auto px-6 py-10">
+                  <div className="flex items-center gap-4 mb-8">
+                    <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-14 h-14 rounded-full object-cover border border-[#2a2238]" />
+                    <div>
+                      <h4 className="text-gray-100 font-bold text-lg">{currentPost.profiles?.username || "Unknown"}</h4>
+                      <p className="text-sm text-gray-500">{new Date(currentPost.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+
+                  <h2 className="text-white font-bold text-4xl mb-8 leading-tight">{currentPost.title}</h2>
+                  
+                  <div 
+                    className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-4 [&>ol]:my-4 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-8 [&>h1]:mb-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: currentPost.description }}
+                  />
+
+                  <div className="flex gap-6 mt-10 mb-6 border-b border-[#2a2238] pb-4">
+                    <h3 className="text-gray-400 text-sm font-semibold uppercase">{comments.length} Comments</h3>
+                    <h3 className="text-gray-400 text-sm font-semibold uppercase">{currentPost.likes?.length || 0} Likes</h3>
+                  </div>
+
+                  <div className="space-y-6 mb-8">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-4 group/comment">
+                        <img src={comment.profiles?.avatar_url || "https://placehold.co/100x100"} className="w-10 h-10 rounded-full bg-gray-800 shrink-0 object-cover" alt="" />
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <div className="flex gap-2 items-baseline">
+                              <span className="text-gray-200 text-sm font-bold">{comment.profiles?.username}</span>
+                              <span className="text-gray-500 text-xs">{new Date(comment.created_at).toLocaleDateString()}</span>
+                            </div>
+                            {authUser?.id === comment.author_id && (
+                              <button 
+                                onClick={() => handleDeleteComment(comment.id, comment.author_id)}
+                                className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1"
+                                title="Delete Comment"
+                              >
+                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-gray-300 text-sm mt-1">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col sm:flex-row items-center gap-4">
+                <div className="flex gap-4">
+                  <button onClick={handleLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors">
+                    <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                  </button>
+                </div>
+                <form onSubmit={handleCommentSubmit} className="flex-1 flex gap-2 w-full">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder={authUser ? "Add a comment..." : "Log in to comment"}
+                    disabled={!authUser}
+                    className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
+                  />
+                  <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                </form>
+              </div>
+            </div>
+
+          ) : (
+
+            <div className="relative w-full max-w-6xl h-[85vh] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              
+              <div className="absolute top-4 right-4 z-50 flex gap-3">
+                {authUser?.id === currentPost.author_id && (
+                  <button 
+                    onClick={handleDeletePost} 
+                    title="Delete Post"
+                    className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10"
+                  >
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedPost(null)}
+                  className="w-8 h-8 bg-black/50 hover:bg-[#ff66aa] text-white rounded-full flex items-center justify-center transition-colors border border-white/10"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="w-full md:w-[65%] bg-black flex items-center justify-center relative border-r border-[#2a2238] p-4">
+                {currentPost.image_url ? (
+                  <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-full object-contain rounded-md" />
+                ) : (
+                  <div className="text-gray-500 text-lg">No image provided</div>
+                )}
+              </div>
+
+              <div className="w-full md:w-[35%] flex flex-col h-full bg-[#16131c]">
+                <div className="p-4 border-b border-[#2a2238] flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden shrink-0">
+                    <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <h4 className="text-gray-100 font-semibold text-sm">{currentPost.profiles?.username || "Unknown"}</h4>
+                    <p className="text-xs text-gray-500">{new Date(currentPost.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                  <div>
+                    <h2 className="text-white font-bold text-2xl mb-4">{currentPost.title}</h2>
+                    <div 
+                      className="text-gray-300 text-sm whitespace-pre-wrap [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline"
+                      dangerouslySetInnerHTML={{ __html: currentPost.description }}
+                    />
+                  </div>
+
+                  <div className="flex gap-6 mt-6 mb-4 border-b border-[#2a2238] pb-4">
+                    <h3 className="text-gray-400 text-xs font-semibold uppercase">{comments.length} Comments</h3>
+                    <h3 className="text-gray-400 text-xs font-semibold uppercase">{currentPost.likes?.length || 0} Likes</h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-3 group/comment">
+                        <img src={comment.profiles?.avatar_url || "https://placehold.co/100x100"} className="w-8 h-8 rounded-full bg-gray-800 shrink-0 object-cover" alt="" />
+                        <div className="flex-1">
+                          <div className="flex justify-between items-baseline">
+                            <div className="flex gap-2 items-baseline">
+                              <span className="text-gray-200 text-sm font-semibold">{comment.profiles?.username}</span>
+                              <span className="text-gray-500 text-[10px]">{new Date(comment.created_at).toLocaleDateString()}</span>
+                            </div>
+                            {authUser?.id === comment.author_id && (
+                              <button 
+                                onClick={() => handleDeleteComment(comment.id, comment.author_id)}
+                                className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1"
+                                title="Delete Comment"
+                              >
+                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-gray-300 text-sm mt-0.5">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-[#2a2238] bg-[#1a1721]">
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex gap-4">
+                      <button onClick={handleLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors">
+                        <svg width="20" height="20" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">{hasLiked ? "Liked" : "Like"}</span>
+                      </button>
+                      <button onClick={() => !authUser && setAuthModalOpen(true)} className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors">
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        <span className="text-sm font-medium">Comment</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleCommentSubmit} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder={authUser ? "Add a comment..." : "Log in to comment"}
+                      disabled={!authUser}
+                      className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
+                    />
+                    <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">
+                      Post
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -217,7 +217,7 @@ export default function ProfileTabs({ userId }: { userId: string }) {
   };
 
   const currentPost = posts.find(p => p.id === selectedPost?.id) || selectedPost;
-  const isLongForm = wordCount >= 500;
+  const isLongForm = wordCount >= 500 || !currentPost?.image_url;
 
   return (
     <div className="bg-[#1a1721] rounded-2xl border border-[#2a2238] p-6 shadow-xl min-h-[600px]">

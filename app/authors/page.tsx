@@ -156,7 +156,7 @@ export default function AuthorsPage() {
   };
 
   const currentPost = authorPosts.find(p => p.id === selectedPost?.id) || selectedPost;
-  const isLongForm = wordCount >= 500;
+  const isLongForm = wordCount >= 500 || !currentPost?.image_url;
 
   return (
     <div className="w-full bg-[#1a1721] p-6 rounded-lg shadow-xl border border-[#2a2238] min-h-screen relative">

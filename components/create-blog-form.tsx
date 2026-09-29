@@ -15,15 +15,16 @@ type CreateBlogFormProps = {
   isModal?: boolean;
 };
 
+// Natively locks TipTap to exactly 15,000 characters (stops copy-paste bypass)
 const TIPTAP_EXTENSIONS = [
   StarterKit, 
   Underline, 
   Link.configure({ openOnClick: false }), 
-  CharacterCount.configure({ limit: null })
+  CharacterCount.configure({ limit: 15000 }) 
 ];
 
-// Zalgo Detection: Looks for 3+ consecutive combining diacritical marks
-const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
+const killZalgo = (text: string) => (text || "").replace(/[\u0300-\u036f\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g, '');
+const cleanInput = (text: string) => killZalgo(text).replace(/[^a-zA-Z0-9\s:'"\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
 
 const MenuBar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
@@ -85,9 +86,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
   
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
-  const [editorHasZalgo, setEditorHasZalgo] = useState(false);
 
-  const wordLimit = 2500;
   const charLimit = 15000;
 
   const editor = useEditor({
@@ -97,10 +96,11 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
     onUpdate: ({ editor }) => { 
       setWordCount(editor.storage.characterCount.words()); 
       setCharCount(editor.storage.characterCount.characters());
-      setEditorHasZalgo(isZalgo(editor.getText()));
     },
     editorProps: {
-      attributes: { class: 'max-w-none min-h-[500px] p-6 focus:outline-none custom-scrollbar text-gray-200 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline' },
+      attributes: { class: 'max-w-none min-h-[500px] p-6 focus:outline-none custom-scrollbar text-gray-200 break-words overflow-hidden [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline' },
+      transformPastedHTML(html) { return killZalgo(html); },
+      transformPastedText(text) { return killZalgo(text); }
     },
   });
 
@@ -142,25 +142,22 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 100) setTitle(text);
+    setTitle(cleanInput(e.target.value).slice(0, 100));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editor) return;
-    if (wordCount > wordLimit) return setMsg({ text: `Content exceeds ${wordLimit} words.`, type: "error" });
     if (charCount > charLimit) return setMsg({ text: `Content exceeds ${charLimit} characters.`, type: "error" });
-    if (wordCount === 0) return setMsg({ text: "Content cannot be empty.", type: "error" });
-    if ([...title].length > 100) return setMsg({ text: "Title cannot exceed 100 characters.", type: "error" });
+    if (charCount === 0) return setMsg({ text: "Content cannot be empty.", type: "error" });
+    if (title.length > 100) return setMsg({ text: "Title cannot exceed 100 characters.", type: "error" });
     
     setIsSubmitting(true);
     setMsg({ text: "Publishing blog...", type: "info" });
 
     const formData = new FormData();
-    formData.append("title", title);
-    formData.append("description", editor.getHTML()); 
+    formData.append("title", cleanInput(title).slice(0, 100));
+    formData.append("description", killZalgo(editor.getHTML())); 
     if (coverFile) formData.append("cover_file", coverFile);
 
     const res = await createBlogPost(formData);
@@ -170,8 +167,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
     else { if (onSuccess) onSuccess(); else router.push("/"); }
   };
 
-  const isOverLimit = wordCount > wordLimit || charCount > charLimit;
-  const zalgoDetected = isZalgo(title) || editorHasZalgo;
+  const isOverLimit = charCount > charLimit;
 
   return (
     <div className={`w-full ${!isModal ? "bg-[#1a1721] p-8 rounded-lg shadow-xl border border-[#2a2238]" : ""}`}>
@@ -184,22 +180,16 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
       {msg.text && (
         <div className={`mb-4 p-4 border rounded-md text-sm font-medium ${msg.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-200' : 'bg-green-500/20 border-green-500/50 text-green-200'}`}>{msg.text}</div>
       )}
-      
-      {zalgoDetected && (
-        <div className="mb-4 p-4 border rounded-md text-sm font-medium bg-red-500/20 border-red-500/50 text-red-200">
-          Zalgo/Glitch text detected. Posting is completely disabled until it is removed.
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div>
           <div className="flex justify-between items-end mb-2">
             <label className="block text-sm font-semibold text-gray-300">Title <span className="text-[#ff66aa]">*</span></label>
-            <span className="text-xs font-medium text-gray-400">{[...title].length} / 100 chars</span>
+            <span className="text-xs font-medium text-gray-400">{title.length} / 100 chars</span>
           </div>
           <input
-            type="text" required value={title} onChange={handleTitleChange}
-            className="w-full bg-[#231d2e] border border-[#3b304c] text-gray-100 rounded-md px-4 py-3 focus:outline-none focus:border-[#ff66aa] transition-colors text-lg shadow-inner"
+            type="text" required value={title} onChange={handleTitleChange} maxLength={100}
+            className="w-full bg-[#231d2e] border border-[#3b304c] text-gray-100 rounded-md px-4 py-3 focus:outline-none focus:border-[#ff66aa] transition-colors text-lg shadow-inner overflow-hidden"
             placeholder="Give your post a catchy title..."
           />
         </div>
@@ -219,12 +209,12 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
               <span className={`text-xs font-medium ${charCount > charLimit ? "text-red-400 font-bold" : "text-gray-400"}`}>
                 {charCount.toLocaleString()} / {charLimit.toLocaleString()} chars
               </span>
-              <span className={`text-xs font-medium ${wordCount > wordLimit ? "text-red-400 font-bold" : "text-gray-400"}`}>
-                {wordCount.toLocaleString()} / {wordLimit.toLocaleString()} words
+              <span className="text-xs font-medium text-gray-400">
+                {wordCount.toLocaleString()} words
               </span>
             </div>
           </div>
-          <div className={`border rounded-md overflow-hidden bg-[#231d2e] shadow-inner transition-colors ${isOverLimit || zalgoDetected ? "border-red-500" : "border-[#3b304c] focus-within:border-[#ff66aa]"}`}>
+          <div className={`border rounded-md overflow-hidden bg-[#231d2e] shadow-inner transition-colors ${isOverLimit ? "border-red-500" : "border-[#3b304c] focus-within:border-[#ff66aa]"}`}>
             <MenuBar editor={editor} />
             <EditorContent editor={editor} />
           </div>
@@ -234,7 +224,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
           {onCancel && (
             <button type="button" onClick={onCancel} className="px-6 py-2 rounded-md font-medium text-gray-400 hover:text-white hover:bg-[#2a2238] transition-colors">Cancel</button>
           )}
-          <button type="submit" disabled={isSubmitting || isOverLimit || zalgoDetected || wordCount === 0 || title.length === 0} className="bg-[#ff66aa] hover:bg-[#ff4499] text-white font-bold py-2.5 px-8 rounded-md transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-lg">
+          <button type="submit" disabled={isSubmitting || isOverLimit || charCount === 0 || title.length === 0} className="bg-[#ff66aa] hover:bg-[#ff4499] text-white font-bold py-2.5 px-8 rounded-md transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-lg">
             {isSubmitting ? "Publishing..." : "Publish Blog"}
           </button>
         </div>

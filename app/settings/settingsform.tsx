@@ -11,7 +11,8 @@ import {
   updateEmail 
 } from "./action";
 
-const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
+const killZalgo = (text: string) => (text || "").replace(/[\u0300-\u036f\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]/g, '');
+const cleanInput = (text: string) => killZalgo(text).replace(/[^a-zA-Z0-9\s:'"\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
 
 export default function SettingsForm({ initialProfile, userEmail }: { initialProfile: any, userEmail: string }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(initialProfile?.cover_photo_url || null);
@@ -83,39 +84,27 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
   };
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 16) setUsername(text);
+    setUsername(cleanInput(e.target.value).slice(0, 16));
   };
 
   const handleBioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 200) setBio(text);
+    setBio(cleanInput(e.target.value).slice(0, 200));
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 100) setNewEmail(text);
+    setNewEmail(killZalgo(e.target.value).replace(/\s/g, '').slice(0, 100));
   };
 
   const handleConfirmEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 100) setConfirmEmail(text);
+    setConfirmEmail(killZalgo(e.target.value).replace(/\s/g, '').slice(0, 100));
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 64) setNewPassword(text);
+    setNewPassword(killZalgo(e.target.value).slice(0, 64));
   };
 
   const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 64) setConfirmPassword(text);
+    setConfirmPassword(killZalgo(e.target.value).slice(0, 64));
   };
 
   function handleCoverSubmit(formData: FormData) {
@@ -154,13 +143,13 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleInfoSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if ([...username].length > 16) return setInfoMsg({ text: "Username must be 16 characters or less.", type: "error" });
-    if ([...bio].length > 200) return setInfoMsg({ text: "Signature cannot exceed 200 characters.", type: "error" });
+    if (username.length > 16) return setInfoMsg({ text: "Username must be 16 characters or less.", type: "error" });
+    if (bio.length > 200) return setInfoMsg({ text: "Signature cannot exceed 200 characters.", type: "error" });
 
     setInfoMsg({ text: "Updating...", type: "info" });
     const formData = new FormData();
-    formData.append("username", username);
-    formData.append("bio", bio);
+    formData.append("username", cleanInput(username).slice(0, 16));
+    formData.append("bio", cleanInput(bio).slice(0, 200));
 
     updateProfileInfo(formData).then((res) => {
       setInfoMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
@@ -169,14 +158,14 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if ([...newPassword].length < 6) return setPasswordMsg({ text: "Password must be at least 6 characters.", type: "error" });
-    if ([...newPassword].length > 64) return setPasswordMsg({ text: "Password cannot exceed 64 characters.", type: "error" });
+    if (newPassword.length < 6) return setPasswordMsg({ text: "Password must be at least 6 characters.", type: "error" });
+    if (newPassword.length > 64) return setPasswordMsg({ text: "Password cannot exceed 64 characters.", type: "error" });
     if (newPassword !== confirmPassword) return setPasswordMsg({ text: "Passwords do not match.", type: "error" });
     
     setPasswordMsg({ text: "Updating...", type: "info" });
     const formData = new FormData();
-    formData.append("new_password", newPassword);
-    formData.append("password_confirmation", confirmPassword);
+    formData.append("new_password", killZalgo(newPassword).slice(0, 64));
+    formData.append("password_confirmation", killZalgo(confirmPassword).slice(0, 64));
 
     updatePassword(formData).then((res) => {
       setPasswordMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
@@ -189,7 +178,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
   function handleEmailSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if ([...newEmail].length > 100) return setEmailMsg({ text: "Email cannot exceed 100 characters.", type: "error" });
+    if (newEmail.length > 100) return setEmailMsg({ text: "Email cannot exceed 100 characters.", type: "error" });
     if (newEmail !== confirmEmail) return setEmailMsg({ text: "Emails do not match.", type: "error" });
 
     const allowedDomains = ["@gmail.com", "@yahoo.com", "@hotmail.com", "@outlook.com"];
@@ -200,8 +189,8 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
     
     setEmailMsg({ text: "Updating...", type: "info" });
     const formData = new FormData();
-    formData.append("new_email", newEmail);
-    formData.append("email_confirmation", confirmEmail);
+    formData.append("new_email", killZalgo(newEmail).slice(0, 100));
+    formData.append("email_confirmation", killZalgo(confirmEmail).slice(0, 100));
 
     updateEmail(formData).then((res) => {
       setEmailMsg({ text: res.error || res.success!, type: res.error ? "error" : "success" });
@@ -291,22 +280,22 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className="text-sm text-gray-400 w-24 text-right">username</label>
-                <input type="text" name="username" value={username} onChange={handleUsernameChange} className={inputClass} placeholder="Max 16 characters" />
+                <input type="text" name="username" value={username} onChange={handleUsernameChange} className={`${inputClass} overflow-hidden`} placeholder="Max 16 characters" />
               </div>
-              <div className="ml-28 mt-1 text-[11px] text-gray-500">{[...username].length}/16 characters</div>
+              <div className="ml-28 mt-1 text-[11px] text-gray-500">{username.length}/16 characters</div>
             </div>
 
             <div>
               <div className="flex items-start gap-4">
                 <label className="text-sm text-gray-400 w-24 text-right mt-2">signature</label>
-                <textarea name="bio" value={bio} onChange={handleBioChange} rows={4} className={`${inputClass} resize-none`} placeholder="Write something about yourself (max 200 characters)..." />
+                <textarea name="bio" value={bio} onChange={handleBioChange} rows={4} className={`${inputClass} resize-none overflow-y-auto overflow-x-hidden`} placeholder="Write something about yourself (max 200 characters)..." />
               </div>
-              <div className="ml-28 mt-1 text-[11px] text-gray-500">{[...bio].length}/200 characters</div>
+              <div className="ml-28 mt-1 text-[11px] text-gray-500">{bio.length}/200 characters</div>
             </div>
 
             <div className="flex items-center gap-4 mt-1">
               <div className="w-24"></div>
-              <button type="submit" disabled={isZalgo(username) || isZalgo(bio)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" disabled={username.length === 0} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
               {infoMsg.text && <p className={`text-sm font-medium ${infoMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{infoMsg.text}</p>}
             </div>
           </div>
@@ -320,15 +309,15 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
               <label className={labelClass}>new password</label>
-              <input type="password" name="new_password" required value={newPassword} onChange={handlePasswordChange} className={inputClass} placeholder="6 - 64 characters" />
+              <input type="password" name="new_password" required value={newPassword} onChange={handlePasswordChange} className={`${inputClass} overflow-hidden`} placeholder="6 - 64 characters" />
             </div>
             <div className="flex items-center gap-4">
               <label className={labelClass}>password confirmation</label>
-              <input type="password" name="password_confirmation" required value={confirmPassword} onChange={handleConfirmPasswordChange} className={inputClass} placeholder="Confirm new password" />
+              <input type="password" name="password_confirmation" required value={confirmPassword} onChange={handleConfirmPasswordChange} className={`${inputClass} overflow-hidden`} placeholder="Confirm new password" />
             </div>
             <div className="ml-40 flex flex-col gap-2 mt-2">
               {passwordMsg.text && <p className={`text-sm font-medium ${passwordMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{passwordMsg.text}</p>}
-              <button type="submit" disabled={isZalgo(newPassword) || isZalgo(confirmPassword)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>
@@ -346,21 +335,21 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>new email</label>
-                <input type="email" name="new_email" required value={newEmail} onChange={handleEmailChange} className={inputClass} placeholder="Trusted domains only" />
+                <input type="email" name="new_email" required value={newEmail} onChange={handleEmailChange} className={`${inputClass} overflow-hidden`} placeholder="Trusted domains only" />
               </div>
-              <div className="ml-40 mt-1 text-[11px] text-gray-500">{[...newEmail].length}/100 characters</div>
+              <div className="ml-40 mt-1 text-[11px] text-gray-500">{newEmail.length}/100 characters</div>
             </div>
 
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>email confirmation</label>
-                <input type="email" name="email_confirmation" required value={confirmEmail} onChange={handleConfirmEmailChange} className={inputClass} placeholder="Confirm new email" />
+                <input type="email" name="email_confirmation" required value={confirmEmail} onChange={handleConfirmEmailChange} className={`${inputClass} overflow-hidden`} placeholder="Confirm new email" />
               </div>
             </div>
 
             <div className="ml-40 flex flex-col gap-2 mt-2 pb-8">
               {emailMsg.text && <p className={`text-sm font-medium ${emailMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{emailMsg.text}</p>}
-              <button type="submit" disabled={isZalgo(newEmail) || isZalgo(confirmEmail)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>

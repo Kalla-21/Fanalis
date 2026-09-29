@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase";
 import { getAuthUser } from "@/app/blog/action";
 import AuthModal from "@/components/auth-modal";
@@ -31,6 +32,7 @@ export default function AuthorsPage() {
   const [authUser, setAuthUser] = useState<any>(null);
   const [authors, setAuthors] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   
   const [selectedAuthor, setSelectedAuthor] = useState<Profile | null>(null);
   const [authorPosts, setAuthorPosts] = useState<Post[]>([]);
@@ -42,6 +44,18 @@ export default function AuthorsPage() {
   const [newComment, setNewComment] = useState("");
   const [hasLiked, setHasLiked] = useState(false);
   const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Centralized Scroll Lock
+  useEffect(() => {
+    if (selectedAuthor || selectedPost) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => { document.body.style.overflow = "auto"; };
+  }, [selectedAuthor, selectedPost]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -63,17 +77,13 @@ export default function AuthorsPage() {
       setPostsLoading(false);
     };
     fetchAuthorPosts();
-    
-    document.body.style.overflow = "hidden";
-    return () => { if (!selectedPost) document.body.style.overflow = "auto"; };
   }, [selectedAuthor]);
 
   useEffect(() => {
-    if (!selectedPost) {
-      if (!selectedAuthor) document.body.style.overflow = "auto";
-      return;
-    }
-    const rawText = selectedPost.description.replace(/<[^>]*>?/gm, '');
+    if (!selectedPost) return;
+
+    const safeDescription = selectedPost.description || "";
+    const rawText = safeDescription.replace(/<[^>]*>?/gm, '');
     setWordCount(rawText.split(/\s+/).filter(Boolean).length);
 
     const fetchPostDetails = async () => {
@@ -93,11 +103,11 @@ export default function AuthorsPage() {
     if (hasLiked) {
       await supabase.from("likes").delete().eq("post_id", selectedPost.id).eq("user_id", authUser.id);
       setHasLiked(false);
-      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: p.likes.filter(l => l.user_id !== authUser.id) } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: (p.likes || []).filter(l => l.user_id !== authUser.id) } : p));
     } else {
       await supabase.from("likes").insert({ post_id: selectedPost.id, user_id: authUser.id });
       setHasLiked(true);
-      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: [...p.likes, { user_id: authUser.id }] } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, likes: [...(p.likes || []), { user_id: authUser.id }] } : p));
     }
   };
 
@@ -108,11 +118,11 @@ export default function AuthorsPage() {
 
     const isCurrentlyLiked = post.likes?.some(l => l.user_id === authUser.id);
     if (isCurrentlyLiked) {
-      setAuthorPosts(authorPosts.map(p => p.id === post.id ? { ...p, likes: p.likes.filter(l => l.user_id !== authUser.id) } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === post.id ? { ...p, likes: (p.likes || []).filter(l => l.user_id !== authUser.id) } : p));
       await supabase.from("likes").delete().eq("post_id", post.id).eq("user_id", authUser.id);
       if (selectedPost?.id === post.id) setHasLiked(false);
     } else {
-      setAuthorPosts(authorPosts.map(p => p.id === post.id ? { ...p, likes: [...p.likes, { user_id: authUser.id }] } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === post.id ? { ...p, likes: [...(p.likes || []), { user_id: authUser.id }] } : p));
       await supabase.from("likes").insert({ post_id: post.id, user_id: authUser.id });
       if (selectedPost?.id === post.id) setHasLiked(true);
     }
@@ -132,7 +142,7 @@ export default function AuthorsPage() {
     if (data) {
       setComments([...comments, data]);
       setNewComment("");
-      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, comments: [...p.comments, { id: data.id } as any] } : p));
+      setAuthorPosts(authorPosts.map(p => p.id === selectedPost.id ? { ...p, comments: [...(p.comments || []), { id: data.id } as any] } : p));
     }
   };
 
@@ -199,10 +209,10 @@ export default function AuthorsPage() {
         </div>
       )}
 
-      {selectedAuthor && (
-        <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 pt-24 pb-4 md:p-10 md:pt-24 overflow-y-auto custom-scrollbar">
+      {mounted && selectedAuthor && createPortal(
+        <div className="fixed inset-0 z-[99998] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-10 overflow-y-auto custom-scrollbar">
           <div className="fixed inset-0" onClick={() => setSelectedAuthor(null)}></div>
-          <div className="relative w-full max-w-5xl max-h-[calc(100vh-8rem)] bg-[#16131c] border border-[#2a2238] rounded-2xl flex flex-col overflow-hidden shadow-2xl my-auto z-10 animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-5xl bg-[#16131c] border border-[#2a2238] rounded-2xl flex flex-col overflow-hidden shadow-2xl my-auto z-10 animate-in zoom-in-95 duration-200">
             <button onClick={() => setSelectedAuthor(null)} className="absolute top-4 right-4 z-50 w-8 h-8 bg-black/50 hover:bg-[#ff66aa] text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -244,7 +254,9 @@ export default function AuthorsPage() {
                       return (
                         <div key={post.id} onClick={() => setSelectedPost(post)} className="bg-[#2a2238] rounded-xl overflow-hidden break-inside-avoid shadow-lg flex flex-col cursor-pointer hover:border-[#ff66aa] border border-[#3e3254]/30 transition-colors group relative">
                           {post.image_url ? (
-                            <div className="w-full relative bg-[#111111]"><img src={post.image_url} alt={post.title} className="w-full h-auto block group-hover:opacity-80 transition-opacity" /></div>
+                            <div className="w-full relative bg-[#111111]">
+                              <img src={post.image_url} alt={post.title} className="w-full h-auto block group-hover:opacity-80 transition-opacity" />
+                            </div>
                           ) : (
                             <div className="w-full h-40 bg-gradient-to-br from-[#2a2238] to-[#1e1929] flex items-center justify-center p-4 text-center">
                               <span className="text-[#ff66aa] font-bold text-lg line-clamp-2">{post.title}</span>
@@ -267,17 +279,18 @@ export default function AuthorsPage() {
                             </div>
                           </div>
                         </div>
-                      )
+                      );
                     })}
                   </div>
                 )}
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {selectedPost && currentPost && (
+      {mounted && selectedPost && currentPost && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-24 pb-4 md:p-10 md:pt-24">
           <div className="absolute inset-0" onClick={() => setSelectedPost(null)}></div>
           
@@ -285,7 +298,7 @@ export default function AuthorsPage() {
             <div className="relative w-full max-w-4xl h-[85vh] max-h-[calc(100vh-8rem)] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-3">
                 {authUser?.id === currentPost.author_id && (
-                  <button onClick={handleDeletePost} title="Delete Post" className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
+                  <button onClick={handleDeletePost} className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
                     <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
                   </button>
                 )}
@@ -294,13 +307,13 @@ export default function AuthorsPage() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {currentPost.image_url && (
                   <div className="w-full bg-black/60 flex items-center justify-center p-6 border-b border-[#2a2238]">
                     <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-[70vh] object-contain rounded-md shadow-lg" />
                   </div>
                 )}
-                <div className="max-w-3xl mx-auto px-6 py-10">
+                <div className="max-w-3xl mx-auto px-6 py-10 pr-24">
                   <div className="flex items-center gap-4 mb-8">
                     <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-14 h-14 rounded-full object-cover border border-[#2a2238]" />
                     <div>
@@ -309,7 +322,7 @@ export default function AuthorsPage() {
                     </div>
                   </div>
                   <h2 className="text-white font-bold text-4xl mb-8 leading-tight break-words">{currentPost.title}</h2>
-                  <div className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-4 [&>ol]:my-4 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-8 [&>h1]:mb-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description }} />
+                  <div className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-4 [&>ol]:my-4 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:mt-8 [&>h1]:mb-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description || "" }} />
 
                   <div className="flex gap-6 mt-10 mb-6 border-b border-[#2a2238] pb-4">
                     <h3 className="text-gray-400 text-sm font-semibold uppercase">{comments.length} Comments</h3>
@@ -324,7 +337,7 @@ export default function AuthorsPage() {
                           <div className="flex justify-between items-baseline">
                             <div className="flex gap-2 items-baseline">
                               <span className="text-gray-200 text-sm font-bold truncate">{comment.profiles?.username}</span>
-                              <span className="text-gray-500 text-xs shrink-0">{new Date(comment.created_at).toLocaleDateString()}</span>
+                              <span className="text-gray-500 text-[10px] shrink-0">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
                             {authUser?.id === comment.author_id && (
                               <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1" title="Delete Comment">
@@ -340,12 +353,12 @@ export default function AuthorsPage() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col sm:flex-row items-center gap-4">
+              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col sm:flex-row items-center gap-4 shrink-0">
                 <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                   <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                 </button>
-                <form onSubmit={handleCommentSubmit} className="flex-1 flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
+                <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
+                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
                   <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
@@ -365,7 +378,8 @@ export default function AuthorsPage() {
                 </button>
               </div>
 
-              <div className="w-full h-1/3 md:h-full md:w-[65%] bg-black flex items-center justify-center relative border-b md:border-b-0 md:border-r border-[#2a2238] p-4 shrink-0">
+              {/* STRICT 60% IMAGE PANEL */}
+              <div className="w-full md:w-[60%] h-[35%] md:h-full bg-black flex items-center justify-center relative border-b md:border-b-0 md:border-r border-[#2a2238] p-4 shrink-0 min-w-0">
                 {currentPost.image_url ? (
                   <img src={currentPost.image_url} alt={currentPost.title} className="max-w-full max-h-full object-contain rounded-md" />
                 ) : (
@@ -373,21 +387,22 @@ export default function AuthorsPage() {
                 )}
               </div>
 
-              <div className="w-full h-2/3 md:h-full md:w-[35%] flex flex-col bg-[#16131c]">
-                <div className="p-4 border-b border-[#2a2238] flex items-center gap-3">
+              {/* STRICT 40% CONTENT PANEL */}
+              <div className="w-full md:w-[40%] h-[65%] md:h-full flex flex-col bg-[#16131c] shrink-0 min-w-[320px]">
+                <div className="p-4 pr-24 border-b border-[#2a2238] flex items-center gap-3 shrink-0">
                   <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden shrink-0">
                     <img src={currentPost.profiles?.avatar_url || "https://placehold.co/100x100"} alt="Avatar" className="w-full h-full object-cover" />
                   </div>
-                  <div>
-                    <h4 className="text-gray-100 font-semibold text-sm">{currentPost.profiles?.username || "Unknown"}</h4>
-                    <p className="text-xs text-gray-500">{new Date(currentPost.created_at).toLocaleDateString()}</p>
+                  <div className="min-w-0">
+                    <h4 className="text-gray-100 font-semibold text-sm truncate">{currentPost.profiles?.username || "Unknown"}</h4>
+                    <p className="text-xs text-gray-500 truncate">{new Date(currentPost.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar min-h-0">
                   <div>
                     <h2 className="text-white font-bold text-2xl mb-4 break-words">{currentPost.title}</h2>
-                    <div className="text-gray-300 text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description }} />
+                    <div className="text-gray-300 text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description || "" }} />
                   </div>
 
                   <div className="flex gap-6 mt-6 mb-4 border-b border-[#2a2238] pb-4">
@@ -402,11 +417,11 @@ export default function AuthorsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-baseline">
                             <div className="flex gap-2 items-baseline">
-                              <span className="text-gray-200 text-sm font-semibold truncate">{comment.profiles?.username}</span>
+                              <span className="text-gray-200 text-sm font-bold truncate">{comment.profiles?.username}</span>
                               <span className="text-gray-500 text-[10px] shrink-0">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
                             {authUser?.id === comment.author_id && (
-                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1">
+                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1" title="Delete Comment">
                                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
                               </button>
                             )}
@@ -419,7 +434,7 @@ export default function AuthorsPage() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3">
+              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3 shrink-0">
                 <div className="flex gap-4">
                   <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                     <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
@@ -427,13 +442,14 @@ export default function AuthorsPage() {
                   </button>
                 </div>
                 <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
-                  <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
+                  <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

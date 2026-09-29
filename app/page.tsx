@@ -19,10 +19,7 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
-// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
-const sanitizeText = (text: string) => {
-  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
-};
+const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
 
 export default function Home() {
   const router = useRouter();
@@ -137,14 +134,15 @@ export default function Home() {
   };
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 250) setNewComment(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return; 
+    if ([...text].length <= 250) setNewComment(text);
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return setAuthModalOpen(true);
-    if (!newComment.trim() || !selectedPost) return;
+    if (!newComment.trim() || !selectedPost || isZalgo(newComment)) return;
 
     const { data } = await supabase.from("comments").insert({ post_id: selectedPost.id, author_id: user.id, content: newComment }).select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).single();
     if (data) {
@@ -175,6 +173,7 @@ export default function Home() {
 
   const currentPost = posts.find(p => p.id === selectedPost?.id) || selectedPost;
   const isLongForm = wordCount >= 500 || !currentPost?.image_url;
+  const zalgoDetected = isZalgo(newComment);
 
   return (
     <div className="w-full bg-[#1a1721] p-6 rounded-lg shadow-xl border border-[#2a2238] min-h-screen relative">
@@ -304,9 +303,9 @@ export default function Home() {
                 <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                   <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                 </button>
-                <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
+                <form onSubmit={handleCommentSubmit} className="flex-1 flex gap-2 w-full">
                   <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                  <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                  <button type="submit" disabled={!user || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
             </div>
@@ -388,7 +387,7 @@ export default function Home() {
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                     <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                    <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                    <button type="submit" disabled={!user || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
               </div>

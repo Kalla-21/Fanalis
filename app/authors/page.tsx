@@ -28,7 +28,8 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
-// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
+
 const sanitizeText = (text: string) => {
   return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
 };
@@ -140,7 +141,7 @@ export default function AuthorsPage() {
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authUser) return setAuthModalOpen(true);
-    if (!newComment.trim() || !selectedPost) return;
+    if (!newComment.trim() || !selectedPost || isZalgo(newComment)) return;
 
     const { data } = await supabase.from("comments").insert({ post_id: selectedPost.id, author_id: authUser.id, content: newComment }).select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).single();
     if (data) {
@@ -171,6 +172,7 @@ export default function AuthorsPage() {
 
   const currentPost = authorPosts.find(p => p.id === selectedPost?.id) || selectedPost;
   const isLongForm = wordCount >= 500 || !currentPost?.image_url;
+  const zalgoDetected = isZalgo(newComment);
 
   return (
     <div className="w-full bg-[#1a1721] p-6 rounded-lg shadow-xl border border-[#2a2238] min-h-screen relative">
@@ -363,7 +365,7 @@ export default function AuthorsPage() {
                 </button>
                 <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                   <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                  <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                  <button type="submit" disabled={!authUser || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
             </div>
@@ -424,7 +426,7 @@ export default function AuthorsPage() {
                               <span className="text-gray-500 text-[10px] shrink-0">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
                             {authUser?.id === comment.author_id && (
-                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1">
+                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1" title="Delete Comment">
                                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
                               </button>
                             )}
@@ -445,7 +447,7 @@ export default function AuthorsPage() {
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                     <input type="text" value={newComment} onChange={handleCommentChange} placeholder={authUser ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!authUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                    <button type="submit" disabled={!authUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                    <button type="submit" disabled={!authUser || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
               </div>

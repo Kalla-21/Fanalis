@@ -11,10 +11,7 @@ import {
   updateEmail 
 } from "./action";
 
-// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
-const sanitizeText = (text: string) => {
-  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
-};
+const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
 
 export default function SettingsForm({ initialProfile, userEmail }: { initialProfile: any, userEmail: string }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(initialProfile?.cover_photo_url || null);
@@ -86,33 +83,39 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
   };
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 16) setUsername(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 16) setUsername(text);
   };
 
   const handleBioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 200) setBio(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 200) setBio(text);
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 100) setNewEmail(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 100) setNewEmail(text);
   };
 
   const handleConfirmEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 100) setConfirmEmail(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 100) setConfirmEmail(text);
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 64) setNewPassword(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 64) setNewPassword(text);
   };
 
   const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const cleaned = sanitizeText(e.target.value);
-    if ([...cleaned].length <= 64) setConfirmPassword(cleaned);
+    const text = e.target.value;
+    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
+    if ([...text].length <= 64) setConfirmPassword(text);
   };
 
   function handleCoverSubmit(formData: FormData) {
@@ -210,7 +213,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
   }
 
   const inputClass = "bg-[#2a2238] border border-transparent text-gray-200 rounded-lg px-3 py-1.5 focus:border-[#735ab0] focus:bg-[#1a1721] focus:outline-none w-full max-w-sm transition-all text-sm";
-  const btnClass = "bg-[#735ab0] hover:bg-[#856ec4] text-white font-bold py-1.5 px-6 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 w-32";
+  const btnClass = "bg-[#735ab0] hover:bg-[#856ec4] text-white font-bold py-1.5 px-6 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 w-32 disabled:opacity-50 disabled:cursor-not-allowed";
   const resetBtnClass = "bg-[#2a2238] hover:bg-[#3e3254] text-gray-300 font-bold py-1.5 px-4 rounded-lg transition-colors text-sm flex items-center justify-center gap-2";
   const rowClass = "grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 py-6 border-b border-[#2a2238] items-start";
   const labelClass = "text-sm text-gray-400 w-36 text-right pt-2";
@@ -303,7 +306,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
             <div className="flex items-center gap-4 mt-1">
               <div className="w-24"></div>
-              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" disabled={isZalgo(username) || isZalgo(bio)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
               {infoMsg.text && <p className={`text-sm font-medium ${infoMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{infoMsg.text}</p>}
             </div>
           </div>
@@ -325,7 +328,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             </div>
             <div className="ml-40 flex flex-col gap-2 mt-2">
               {passwordMsg.text && <p className={`text-sm font-medium ${passwordMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{passwordMsg.text}</p>}
-              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" disabled={isZalgo(newPassword) || isZalgo(confirmPassword)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>
@@ -357,7 +360,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
 
             <div className="ml-40 flex flex-col gap-2 mt-2 pb-8">
               {emailMsg.text && <p className={`text-sm font-medium ${emailMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{emailMsg.text}</p>}
-              <button type="submit" className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+              <button type="submit" disabled={isZalgo(newEmail) || isZalgo(confirmEmail)} className={btnClass}>update <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
             </div>
           </div>
         </div>

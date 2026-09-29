@@ -18,7 +18,8 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
-// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const isZalgo = (text: string) => /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{3,}/.test(text);
+
 const sanitizeText = (text: string) => {
   return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
 };
@@ -132,7 +133,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!serverUser) return setAuthModalOpen(true);
-    if (!newComment.trim() || !selectedPost) return;
+    if (!newComment.trim() || !selectedPost || isZalgo(newComment)) return;
 
     const { data } = await supabase.from("comments").insert({ post_id: selectedPost.id, author_id: serverUser.id, content: newComment }).select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).single();
     if (data) {
@@ -163,6 +164,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
 
   const currentPost = posts.find(p => p.id === selectedPost?.id) || selectedPost;
   const isLongForm = wordCount >= 500 || !currentPost?.image_url;
+  const zalgoDetected = isZalgo(newComment);
 
   return (
     <div className="bg-[#1a1721] rounded-2xl border border-[#2a2238] p-6 shadow-xl min-h-[600px]">
@@ -289,7 +291,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
                 </button>
                 <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                   <input type="text" value={newComment} onChange={handleCommentChange} placeholder={serverUser ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!serverUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                  <button type="submit" disabled={!serverUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                  <button type="submit" disabled={!serverUser || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
             </div>
@@ -371,7 +373,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                     <input type="text" value={newComment} onChange={handleCommentChange} placeholder={serverUser ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!serverUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                    <button type="submit" disabled={!serverUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
+                    <button type="submit" disabled={!serverUser || !newComment.trim() || zalgoDetected} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
               </div>

@@ -18,6 +18,11 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
+// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const sanitizeText = (text: string) => {
+  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
+};
+
 export default function ProfileTabs({ userId, serverUser }: { userId: string, serverUser: any }) {
   const [activeTab, setActiveTab] = useState<"My Blogs" | "Liked" | "Comments">("My Blogs");
   const [posts, setPosts] = useState<Post[]>([]);
@@ -120,9 +125,8 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
   };
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return; 
-    if ([...text].length <= 250) setNewComment(text);
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 250) setNewComment(cleaned);
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -346,7 +350,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
                               <span className="text-gray-500 text-[10px] shrink-0">{new Date(comment.created_at).toLocaleDateString()}</span>
                             </div>
                             {serverUser?.id === comment.author_id && (
-                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1" title="Delete Comment">
+                              <button onClick={() => handleDeleteComment(comment.id, comment.author_id)} className="opacity-0 group-hover/comment:opacity-100 text-gray-500 hover:text-red-500 transition-all p-1">
                                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
                               </button>
                             )}
@@ -367,7 +371,7 @@ export default function ProfileTabs({ userId, serverUser }: { userId: string, se
                   </div>
                   <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
                     <input type="text" value={newComment} onChange={handleCommentChange} placeholder={serverUser ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!serverUser} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
-                    <button type="submit" disabled={!serverUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                    <button type="submit" disabled={!serverUser || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
               </div>

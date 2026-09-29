@@ -22,19 +22,24 @@ const TIPTAP_EXTENSIONS = [
   CharacterCount.configure({ limit: null })
 ];
 
+// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const sanitizeText = (text: string) => {
+  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
+};
+
 const MenuBar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
 
   const setLink = useCallback(() => {
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL', previousUrl)
-    if (url === null) return
+    const previousUrl = editor.getAttributes('link').href;
+    const url = window.prompt('URL', previousUrl);
+    if (url === null) return;
     if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }, [editor])
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  }, [editor]);
 
   const btnClass = (isActive: boolean) => `p-2 text-sm rounded transition-colors flex-shrink-0 ${isActive ? "bg-[#ff66aa] text-white" : "text-gray-300 hover:bg-[#2a2238] hover:text-white"}`;
 
@@ -82,6 +87,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
   
   const [wordCount, setWordCount] = useState(0);
   const [charCount, setCharCount] = useState(0);
+  const [hasZalgo, setHasZalgo] = useState(false);
 
   const wordLimit = 2500;
   const charLimit = 15000;
@@ -93,9 +99,22 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
     onUpdate: ({ editor }) => { 
       setWordCount(editor.storage.characterCount.words()); 
       setCharCount(editor.storage.characterCount.characters());
+      
+      // Blocks publishing if Zalgo is typed via alt-codes
+      const textContent = editor.getText();
+      const isCorrupted = /[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu.test(textContent);
+      setHasZalgo(isCorrupted);
     },
     editorProps: {
       attributes: { class: 'max-w-none min-h-[500px] p-6 focus:outline-none custom-scrollbar text-gray-200 [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline' },
+      // Auto-strips Zalgo when pasting text
+      transformPastedText(text) {
+        return sanitizeText(text);
+      },
+      // Auto-strips Zalgo when pasting rich HTML
+      transformPastedHTML(html) {
+        return html.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F;]/gu, '');
+      }
     },
   });
 
@@ -109,7 +128,6 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         setMsg({ text: "File must be under 2MB.", type: "error" }); e.target.value = ""; return;
       }
 
-      // Check for strictly >= 300 and <= 2000 dimensions
       const dimensionCheck = await new Promise<{valid: boolean, errorMsg: string}>((resolve) => {
         const img = new window.Image();
         img.onload = () => {
@@ -138,9 +156,9 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return;
-    if ([...text].length <= 100) setTitle(text);
+    const cleaned = sanitizeText(e.target.value);
+    // Uses ES6 spreading to count Emojis as exactly 1 character
+    if ([...cleaned].length <= 100) setTitle(cleaned);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -179,6 +197,12 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
       {msg.text && (
         <div className={`mb-4 p-4 border rounded-md text-sm font-medium ${msg.type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-200' : 'bg-green-500/20 border-green-500/50 text-green-200'}`}>{msg.text}</div>
       )}
+      
+      {hasZalgo && (
+        <div className="mb-4 p-4 border rounded-md text-sm font-medium bg-red-500/20 border-red-500/50 text-red-200">
+          Invalid characters (e.g., glitch text) detected in content. Please use only alphanumeric, basic punctuation, and emojis.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div>
@@ -194,7 +218,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Min 300x300, Max 2000x2000px)</label>
+          <label className="block text-sm font-semibold text-gray-300 mb-2">Cover Image (Min 300x300px, Max 2000x2000px)</label>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {coverPreview && <img src={coverPreview} alt="Preview" className="w-40 h-28 object-cover rounded-md border border-[#2a2238] shadow-md" />}
             <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-[#735ab0] file:text-white hover:file:bg-[#856ec4] cursor-pointer transition-colors" />
@@ -213,7 +237,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
               </span>
             </div>
           </div>
-          <div className={`border rounded-md overflow-hidden bg-[#231d2e] shadow-inner transition-colors ${isOverLimit ? "border-red-500" : "border-[#3b304c] focus-within:border-[#ff66aa]"}`}>
+          <div className={`border rounded-md overflow-hidden bg-[#231d2e] shadow-inner transition-colors ${isOverLimit || hasZalgo ? "border-red-500" : "border-[#3b304c] focus-within:border-[#ff66aa]"}`}>
             <MenuBar editor={editor} />
             <EditorContent editor={editor} />
           </div>
@@ -223,7 +247,7 @@ export default function CreateBlogForm({ onSuccess, onCancel, isModal = false }:
           {onCancel && (
             <button type="button" onClick={onCancel} className="px-6 py-2 rounded-md font-medium text-gray-400 hover:text-white hover:bg-[#2a2238] transition-colors">Cancel</button>
           )}
-          <button type="submit" disabled={isSubmitting || isOverLimit || wordCount === 0 || title.length === 0} className="bg-[#ff66aa] hover:bg-[#ff4499] text-white font-bold py-2.5 px-8 rounded-md transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-lg">
+          <button type="submit" disabled={isSubmitting || isOverLimit || hasZalgo || wordCount === 0 || title.length === 0} className="bg-[#ff66aa] hover:bg-[#ff4499] text-white font-bold py-2.5 px-8 rounded-md transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-lg">
             {isSubmitting ? "Publishing..." : "Publish Blog"}
           </button>
         </div>

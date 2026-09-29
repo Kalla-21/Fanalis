@@ -19,6 +19,11 @@ type Post = {
   comments: { id: string; author_id: string; content: string; created_at: string; profiles?: any }[];
 };
 
+// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const sanitizeText = (text: string) => {
+  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
+};
+
 export default function Home() {
   const router = useRouter();
   
@@ -132,9 +137,8 @@ export default function Home() {
   };
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!/^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text)) return; 
-    if ([...text].length <= 250) setNewComment(text);
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 250) setNewComment(cleaned);
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -300,8 +304,8 @@ export default function Home() {
                 <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
                   <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
                 </button>
-                <form onSubmit={handleCommentSubmit} className="flex-1 flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
+                <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
+                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (alphanumeric, max 250 chars)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner min-w-0" />
                   <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                 </form>
               </div>
@@ -344,7 +348,7 @@ export default function Home() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar min-h-0">
                   <div>
                     <h2 className="text-white font-bold text-2xl mb-4 break-words">{currentPost.title}</h2>
-                    <div className="text-gray-300 text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description }} />
+                    <div className="text-gray-300 text-sm whitespace-pre-wrap break-words overflow-hidden max-w-full [&>ul]:list-disc [&>ol]:list-decimal [&>ul]:ml-6 [&>ol]:ml-6 [&>ul]:my-2 [&>ol]:my-2 [&>h1]:text-3xl [&>h1]:font-bold [&>h1]:my-4 [&>h2]:text-2xl [&>h2]:font-bold [&>h2]:my-3 [&>h3]:text-xl [&>h3]:font-bold [&>h3]:my-2 [&_a]:text-[#ff66aa] [&_a]:underline" dangerouslySetInnerHTML={{ __html: currentPost.description || "" }} />
                   </div>
 
                   <div className="flex gap-6 mt-6 mb-4 border-b border-[#2a2238] pb-4">
@@ -387,7 +391,6 @@ export default function Home() {
                     <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-4 disabled:opacity-50 hover:text-[#ff4499] transition-colors shrink-0">Post</button>
                   </form>
                 </div>
-
               </div>
             </div>
           )}

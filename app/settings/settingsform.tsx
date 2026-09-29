@@ -11,8 +11,10 @@ import {
   updateEmail 
 } from "./action";
 
-// Regex allows exactly: Alphanumeric, spaces, specified symbols, and standard Emojis
-const isValidText = (text: string) => /^[a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]*$/u.test(text);
+// Aggressively strips Zalgo combining marks and unauthorized symbols. Allows Emojis.
+const sanitizeText = (text: string) => {
+  return text.replace(/[^a-zA-Z0-9\s:"'\[\]\{\}\\|><\?,\.\/\-=_\+\(\)!@#\$%\^&\*\p{Emoji}\u200D\uFE0F]/gu, '');
+};
 
 export default function SettingsForm({ initialProfile, userEmail }: { initialProfile: any, userEmail: string }) {
   const [coverPreview, setCoverPreview] = useState<string | null>(initialProfile?.cover_photo_url || null);
@@ -51,17 +53,23 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
         return;
       }
 
-      const isValidDimensions = await new Promise<boolean>((resolve) => {
+      const dimensionCheck = await new Promise<{valid: boolean, errorMsg: string}>((resolve) => {
         const img = new window.Image();
         img.onload = () => {
           URL.revokeObjectURL(img.src);
-          resolve(img.width <= 2000 && img.height <= 2000);
+          if (img.width > 2000 || img.height > 2000) {
+            resolve({ valid: false, errorMsg: "Dimensions exceed max resolution (2000x2000)." });
+          } else if (img.width < 300 || img.height < 300) {
+            resolve({ valid: false, errorMsg: "Image must be at least 300x300 pixels." });
+          } else {
+            resolve({ valid: true, errorMsg: "" });
+          }
         };
         img.src = URL.createObjectURL(file);
       });
 
-      if (!isValidDimensions) {
-        const msg = { text: "Image dimensions exceed max resolution (2000x2000).", type: "error" };
+      if (!dimensionCheck.valid) {
+        const msg = { text: dimensionCheck.errorMsg, type: "error" };
         if (type === "cover") { setCoverMsg(msg); setCoverPreview(initialProfile?.cover_photo_url || null); }
         else { setAvatarMsg(msg); setAvatarPreview(initialProfile?.avatar_url || null); }
         e.target.value = ""; 
@@ -78,15 +86,33 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
   };
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value;
-    if (!isValidText(text)) return;
-    if ([...text].length <= 16) setUsername(text);
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 16) setUsername(cleaned);
   };
 
   const handleBioChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    if (!isValidText(text)) return;
-    if ([...text].length <= 200) setBio(text);
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 200) setBio(cleaned);
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 100) setNewEmail(cleaned);
+  };
+
+  const handleConfirmEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 100) setConfirmEmail(cleaned);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 64) setNewPassword(cleaned);
+  };
+
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleaned = sanitizeText(e.target.value);
+    if ([...cleaned].length <= 64) setConfirmPassword(cleaned);
   };
 
   function handleCoverSubmit(formData: FormData) {
@@ -291,11 +317,11 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
               <label className={labelClass}>new password</label>
-              <input type="password" name="new_password" required value={newPassword} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 64) setNewPassword(e.target.value); }} className={inputClass} placeholder="6 - 64 characters" />
+              <input type="password" name="new_password" required value={newPassword} onChange={handlePasswordChange} className={inputClass} placeholder="6 - 64 characters" />
             </div>
             <div className="flex items-center gap-4">
               <label className={labelClass}>password confirmation</label>
-              <input type="password" name="password_confirmation" required value={confirmPassword} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 64) setConfirmPassword(e.target.value); }} className={inputClass} placeholder="Confirm new password" />
+              <input type="password" name="password_confirmation" required value={confirmPassword} onChange={handleConfirmPasswordChange} className={inputClass} placeholder="Confirm new password" />
             </div>
             <div className="ml-40 flex flex-col gap-2 mt-2">
               {passwordMsg.text && <p className={`text-sm font-medium ${passwordMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>{passwordMsg.text}</p>}
@@ -317,7 +343,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>new email</label>
-                <input type="email" name="new_email" required value={newEmail} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 100) setNewEmail(e.target.value); }} className={inputClass} placeholder="Trusted domains only" />
+                <input type="email" name="new_email" required value={newEmail} onChange={handleEmailChange} className={inputClass} placeholder="Trusted domains only" />
               </div>
               <div className="ml-40 mt-1 text-[11px] text-gray-500">{[...newEmail].length}/100 characters</div>
             </div>
@@ -325,7 +351,7 @@ export default function SettingsForm({ initialProfile, userEmail }: { initialPro
             <div>
               <div className="flex items-center gap-4">
                 <label className={labelClass}>email confirmation</label>
-                <input type="email" name="email_confirmation" required value={confirmEmail} onChange={(e) => { if (isValidText(e.target.value) && [...e.target.value].length <= 100) setConfirmEmail(e.target.value); }} className={inputClass} placeholder="Confirm new email" />
+                <input type="email" name="email_confirmation" required value={confirmEmail} onChange={handleConfirmEmailChange} className={inputClass} placeholder="Confirm new email" />
               </div>
             </div>
 

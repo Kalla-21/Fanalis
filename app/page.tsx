@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabase"; 
 import AuthModal from "@/components/auth-modal";
 import { getAuthUser } from "@/app/blog/action";
@@ -26,7 +25,6 @@ export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
   
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -35,8 +33,6 @@ export default function Home() {
   const [newComment, setNewComment] = useState("");
   const [hasLiked, setHasLiked] = useState(false);
   const [wordCount, setWordCount] = useState(0);
-
-  useEffect(() => { setMounted(true); }, []);
 
   const fetchUserAndPosts = async () => {
     setIsLoading(true);
@@ -64,6 +60,7 @@ export default function Home() {
     }
 
     const { data, error } = await query;
+    
     if (error) console.error("Supabase Fetch Error:", error.message);
     else if (data) setPosts(data as unknown as Post[]);
     
@@ -83,7 +80,12 @@ export default function Home() {
     setWordCount(rawText.split(/\s+/).filter(Boolean).length);
 
     const fetchPostDetails = async () => {
-      const { data: commentsData } = await supabase.from("comments").select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).eq("post_id", selectedPost.id).order("created_at", { ascending: true });
+      const { data: commentsData } = await supabase
+        .from("comments")
+        .select(`*, profiles!comments_author_id_fkey(username, avatar_url)`)
+        .eq("post_id", selectedPost.id)
+        .order("created_at", { ascending: true });
+      
       if (commentsData) setComments(commentsData);
 
       if (user) {
@@ -136,6 +138,7 @@ export default function Home() {
     if (!newComment.trim() || !selectedPost) return;
 
     const { data } = await supabase.from("comments").insert({ post_id: selectedPost.id, author_id: user.id, content: newComment }).select(`*, profiles!comments_author_id_fkey(username, avatar_url)`).single();
+
     if (data) {
       setComments([...comments, data]);
       setNewComment("");
@@ -225,13 +228,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* PORTALED MODAL */}
-      {mounted && selectedPost && currentPost && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 md:p-10">
+      {selectedPost && currentPost && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-24 pb-4 md:p-10 md:pt-24">
           <div className="absolute inset-0" onClick={() => setSelectedPost(null)}></div>
           
           {isLongForm ? (
-            <div className="relative w-full max-w-4xl h-[90vh] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-4xl h-[85vh] max-h-[calc(100vh-8rem)] bg-[#16131c] border border-[#2a2238] rounded-xl flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-3">
                 {user?.id === currentPost.author_id && (
                   <button onClick={handleDeletePost} className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
@@ -302,7 +304,7 @@ export default function Home() {
 
           ) : (
 
-            <div className="relative w-full max-w-6xl h-[85vh] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="relative w-full max-w-6xl h-[85vh] max-h-[calc(100vh-8rem)] bg-[#111111] border border-[#2a2238] rounded-xl flex flex-col md:flex-row overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
               <div className="absolute top-4 right-4 z-50 flex gap-3">
                 {user?.id === currentPost.author_id && (
                   <button onClick={handleDeletePost} className="w-8 h-8 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors border border-white/10">
@@ -366,24 +368,23 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3">
-                <div className="flex gap-4">
-                  <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
-                    <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-                    <span className="text-sm font-medium">{hasLiked ? "Liked" : "Like"}</span>
-                  </button>
+                <div className="p-4 border-t border-[#2a2238] bg-[#1a1721] flex flex-col gap-3">
+                  <div className="flex gap-4">
+                    <button onClick={handleModalLike} className="flex items-center gap-2 text-gray-300 hover:text-[#ff66aa] transition-colors shrink-0">
+                      <svg width="24" height="24" fill={hasLiked ? "#ff66aa" : "none"} viewBox="0 0 24 24" stroke={hasLiked ? "#ff66aa" : "currentColor"} strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                      <span className="text-sm font-medium">{hasLiked ? "Liked" : "Like"}</span>
+                    </button>
+                  </div>
+                  <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
+                    <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
+                    <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
+                  </form>
                 </div>
-                <form onSubmit={handleCommentSubmit} className="flex gap-2 w-full">
-                  <input type="text" value={newComment} onChange={handleCommentChange} placeholder={user ? "Add a comment (max 150 words)..." : "Log in to comment"} disabled={!user} className="flex-1 bg-[#231d2e] border border-[#3b304c] text-sm text-gray-200 rounded-full px-4 py-2 focus:outline-none focus:border-[#ff66aa] disabled:opacity-50 shadow-inner" />
-                  <button type="submit" disabled={!user || !newComment.trim()} className="text-[#ff66aa] font-semibold text-sm px-2 disabled:opacity-50 hover:text-[#ff4499] transition-colors">Post</button>
-                </form>
               </div>
             </div>
           )}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

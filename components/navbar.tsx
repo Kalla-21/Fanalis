@@ -113,7 +113,7 @@ export default function Navbar({ profile }: NavbarProps) {
                 </Link>
               
                 {/* dropdown when hovered */}
-                <div className="absolute right-0 top-full mt-2 w-56 bg-[#1a1721] rounded-md shadow-2xl opacity-0 invisible group-hover/profile:opacity-100 group-hover/profile:visible transition-all duration-200 flex flex-col overflow-hidden border border-[#2a2238]">
+                <div className="absolute right-0 top-full mt-2 w-56 bg-[#1a1721] rounded-md shadow-2xl opacity-0 invisible group-hover/profile:opacity-100 group-hover/profile:visible transition-all duration-200 flex flex-col overflow-hidden border border-[#2a2238] hidden md:flex">
                   <Link href="/profile">  
                     <div className="relative h-24 w-full bg-cover bg-center" 
                       style={{ backgroundImage: `url('${coverUrl}')`}} >
@@ -170,11 +170,29 @@ export default function Navbar({ profile }: NavbarProps) {
 
         {/* Mobile Navigation Dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden absolute top-full left-0 w-full bg-[#1a1721] border-b border-[#2a2238] shadow-2xl py-4 flex flex-col items-center gap-6 animate-in slide-in-from-top-2 duration-200 z-40">
+          <div className="md:hidden absolute top-full left-0 w-full bg-[#1a1721] border-b border-[#2a2238] shadow-2xl py-6 flex flex-col items-center gap-6 animate-in slide-in-from-top-2 duration-200 z-40">
             <Link href="/" onClick={() => setMobileMenuOpen(false)} className="text-white font-bold text-xl hover:text-pink-300 transition-colors">blogs</Link>
             <Link href="/authors" onClick={() => setMobileMenuOpen(false)} className="text-white font-bold text-xl hover:text-pink-300 transition-colors">authors</Link>
             <button onClick={handleNewBlogClick} className="text-white font-bold text-xl hover:text-pink-300 transition-colors">new blog</button>
             <Link href="/about" onClick={() => setMobileMenuOpen(false)} className="text-white font-bold text-xl hover:text-pink-300 transition-colors">about</Link>
+            
+            {/* Mobile Profile Actions */}
+            {profile && (
+              <>
+                <div className="w-1/3 h-px bg-[#3b304c] my-1"></div>
+                <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="text-[#66ccff] font-bold text-xl hover:text-pink-300 transition-colors">my profile</Link>
+                <Link href="/settings" onClick={() => setMobileMenuOpen(false)} className="text-[#66ccff] font-bold text-xl hover:text-pink-300 transition-colors">profile settings</Link>
+                <button 
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logoutUser();
+                  }} 
+                  className="text-[#ff66aa] font-bold text-xl hover:text-[#ff4499] transition-colors"
+                >
+                  sign out
+                </button>
+              </>
+            )}
           </div>
         )}
       </header>
